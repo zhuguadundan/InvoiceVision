@@ -16,7 +16,9 @@
       "Bash(del:*)",
       "Bash(git init:*)",
       "Bash(git remote:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(git filter-branch:*)"
     ],
     "deny": []
   }
