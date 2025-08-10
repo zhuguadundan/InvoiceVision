@@ -1,0 +1,10 @@
+{
+  "offline_mode": true,
+  "models": {
+    "cls_model_dir": "D:\\InvoiceOCRer-main\\models\\PP-LCNet_x1_0_textline_ori",
+    "det_model_dir": "D:\\InvoiceOCRer-main\\models\\PP-OCRv5_server_det",
+    "rec_model_dir": "D:\\InvoiceOCRer-main\\models\\PP-OCRv5_server_rec"
+  },
+  "use_gpu": false,
+  "lang": "ch"
+}
