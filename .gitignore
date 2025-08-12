@@ -55,3 +55,38 @@ coverage.xml
 
 # 日志文件
 *.log
+
+# PyInstaller specific
+*.manifest
+*.spec
+
+# Test and debug files
+test_*.py
+debug_*.py
+*_test.py
+*_debug.py
+
+# Sample data files
+images/
+sample_data/
+test_data/
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Claude Code specific
+.claude/
+*.claude
+
+# Paddle specific
+.paddlex_version
+log/
+checkpoint/
+
+# Temporary files
+*.tmp
+*.temp
+*.nul

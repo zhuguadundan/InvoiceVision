@@ -18,7 +18,25 @@
       "Bash(git remote:*)",
       "Bash(git add:*)",
       "Bash(git push:*)",
-      "Bash(git filter-branch:*)"
+      "Bash(git filter-branch:*)",
+      "Bash(git gc:*)",
+      "Bash(timeout:*)",
+      "Bash(if exist build rmdir /s /q build)",
+      "Bash(if exist dist rmdir /s /q dist)",
+      "Bash(InvoiceVision.exe --help)",
+      "Bash(taskkill:*)",
+      "Bash(claude mcp add context7 --transport stdio --command \"npx -y @upstash/context7-mcp@latest\")",
+      "Bash(claude mcp add context7 --transport stdio C:programInvoiceVisionrun_context7.cmd)",
+      "Bash(claude mcp list)",
+      "Bash(npm install -g @upstash/context7-mcp)",
+      "Bash(set USERPROFILE)",
+      "Bash(powershell -Command \"Write-Output $env:USERPROFILE\")",
+      "Bash(powershell -Command \"Get-ChildItem -Path ''C:\\Users\\dawei'' -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_Name -like ''*claude*'' }\")",
+      "Bash(claude --version)",
+      "Bash(claude status)",
+      "Bash(claude config list)",
+      "Bash(claude statusline)",
+      "Bash(claude statusline --type command --command \"C:\\Users\\dawei\\.claude\\statusline-command.sh\")"
     ],
     "deny": []
   }

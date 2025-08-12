@@ -25,7 +25,7 @@ def ocr_pdf_offline(pdf_path, precision_mode, output_dir=None):
         print(f"精度模式: {precision_mode}")
         
         # 创建结果DataFrame
-        invoice_info = DataFrame(columns=['文件地址', '发票代码', '发票号码', '日期', '金额（不含税）'])
+        invoice_info = DataFrame(columns=['文件地址', '开票公司', '发票号码', '日期', '金额（不含税）', '项目名称'])
         
         # 转换PDF为图片
         print("正在将PDF转换为图片...")
@@ -61,12 +61,17 @@ def ocr_pdf_offline(pdf_path, precision_mode, output_dir=None):
                 
                 # 执行OCR识别
                 result = ocr_engine.run_ocr(image_path)
+                # 确保结果有正确的长度（6个字段：文件路径, 公司名称, 发票号码, 日期, 金额, 项目名称）
+                while len(result) < 6:
+                    result.append('')  # 补充空字段
+                if len(result) > 6:
+                    result = result[:6]  # 截断多余字段
                 invoice_info.loc[item_no] = result
                 
                 # 显示识别结果
-                if result[1] or result[2]:  # 如果识别到发票代码或号码
+                if result[1] or result[2]:  # 如果识别到公司名称或发票号码
                     processed_count += 1
-                    print(f"  识别成功: 代码={result[1]}, 号码={result[2]}")
+                    print(f"  识别成功: 公司={result[1]}, 号码={result[2]}")
                 else:
                     print(f"  未识别到发票信息")
                 
@@ -88,10 +93,11 @@ def ocr_pdf_offline(pdf_path, precision_mode, output_dir=None):
             for _, row in invoice_info.iterrows():
                 invoice_list.append([
                     row['文件地址'],     # 文件路径
-                    row['发票代码'],     # 发票代码  
+                    row['开票公司'],     # 开票公司名称
                     row['发票号码'],     # 发票号码
                     row['日期'],        # 发票日期
-                    row['金额（不含税）'] # 发票金额
+                    row['金额（不含税）'], # 发票金额
+                    row['项目名称']      # 项目名称
                 ])
         
         result_data = {
@@ -123,7 +129,7 @@ def ocr_images_offline(image_folder_path, precision_mode, output_dir=None):
         print(f"精度模式: {precision_mode}")
         
         # 创建结果DataFrame
-        invoice_info = DataFrame(columns=['文件地址', '发票代码', '发票号码', '日期', '金额（不含税）'])
+        invoice_info = DataFrame(columns=['文件地址', '开票公司', '发票号码', '日期', '金额（不含税）', '项目名称'])
         
         # 初始化离线OCR识别器
         print("初始化离线OCR引擎...")
@@ -154,12 +160,17 @@ def ocr_images_offline(image_folder_path, precision_mode, output_dir=None):
                 
                 # 执行OCR识别
                 result = ocr_engine.run_ocr(image_path)
+                # 确保结果有正确的长度（6个字段：文件路径, 公司名称, 发票号码, 日期, 金额, 项目名称）
+                while len(result) < 6:
+                    result.append('')  # 补充空字段
+                if len(result) > 6:
+                    result = result[:6]  # 截断多余字段
                 invoice_info.loc[item_no] = result
                 
                 # 显示识别结果
-                if result[1] or result[2]:  # 如果识别到发票代码或号码
+                if result[1] or result[2]:  # 如果识别到公司名称或发票号码
                     processed_count += 1
-                    print(f"  识别成功: 代码={result[1]}, 号码={result[2]}")
+                    print(f"  识别成功: 公司={result[1]}, 号码={result[2]}")
                 else:
                     print(f"  未识别到发票信息")
                 
@@ -181,10 +192,11 @@ def ocr_images_offline(image_folder_path, precision_mode, output_dir=None):
             for _, row in invoice_info.iterrows():
                 invoice_list.append([
                     row['文件地址'],     # 文件路径
-                    row['发票代码'],     # 发票代码  
+                    row['开票公司'],     # 开票公司名称
                     row['发票号码'],     # 发票号码
                     row['日期'],        # 发票日期
-                    row['金额（不含税）'] # 发票金额
+                    row['金额（不含税）'], # 发票金额
+                    row['项目名称']      # 项目名称
                 ])
         
         result_data = {

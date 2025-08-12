@@ -1,10 +1,8 @@
 {
   "offline_mode": true,
-  "models": {
-    "cls_model_dir": "D:\\InvoiceOCRer-main\\models\\PP-LCNet_x1_0_textline_ori",
-    "det_model_dir": "D:\\InvoiceOCRer-main\\models\\PP-OCRv5_server_det",
-    "rec_model_dir": "D:\\InvoiceOCRer-main\\models\\PP-OCRv5_server_rec"
-  },
+  "models_path": "models",
   "use_gpu": false,
-  "lang": "ch"
+  "lang": "ch",
+  "version": "2.0-external-models",
+  "description": "外部模型架构配置 - 模型文件不再打包到exe中"
 }

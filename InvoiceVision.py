@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-离线版GUI界面 - 完全离线运行的发票OCR识别器
+离线版GUI界面 - 完全离线运行的发票OCR识别器 (外部模型架构)
 """
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -17,6 +17,24 @@ from PyQt5.Qt import QThread, QMutex, pyqtSignal
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon, QPixmap
 from MainAction import ocr_pdf_offline, ocr_images_offline
+try:
+    # 注意：使用ModelManager.py（大写M），不是model_manager.py
+    from ModelManager import ModelManager, check_and_setup_models
+except ImportError as e:
+    print(f"Warning: Could not import ModelManager: {e}")
+    # 如果模型管理器不可用，创建简单的替代
+    class ModelManager:
+        def __init__(self):
+            pass
+        def check_models_status(self):
+            return "unknown", "模型管理器不可用"
+        def prompt_download_models(self):
+            return False
+    
+    def check_and_setup_models():
+        """替代函数，总是返回True避免启动失败"""
+        print("使用替代的check_and_setup_models函数")
+        return True
 import os
 import json
 import pandas as pd
@@ -74,6 +92,11 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         self.output_dir = os.getcwd()  # 默认输出目录
         self.ocr_results = {}  # 存储OCR结果
         self.accumulated_results = []  # 累积所有识别结果
+        
+        # 检查模型状态
+        self.model_manager = ModelManager()
+        self.check_models_on_startup()
+        
         self.setup_ui()
         self.pdf_thread = None
         self.image_thread = None
@@ -89,6 +112,55 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             except:
                 pass
         return False
+        
+    def check_models_on_startup(self):
+        """启动时检查模型状态"""
+        try:
+            status, message = self.model_manager.check_models_status()
+            
+            if status == "missing_all":
+                # 所有模型都缺失，提示用户
+                reply = QMessageBox.question(
+                    None, 
+                    "模型文件缺失", 
+                    f"{message}\n\n是否现在下载模型文件？\n"
+                    "（这是首次运行所必需的，约需要下载100MB文件）",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                
+                if reply == QMessageBox.Yes:
+                    self.download_models_with_progress()
+                else:
+                    QMessageBox.information(
+                        None,
+                        "提示",
+                        "程序将以有限功能模式启动。\n"
+                        "您可以稍后通过【工具】菜单下载模型文件。"
+                    )
+            elif status == "partial":
+                # 部分模型缺失
+                QMessageBox.warning(
+                    None,
+                    "模型文件不完整", 
+                    f"{message}\n\n建议通过【工具】菜单重新下载完整模型文件。"
+                )
+                
+        except Exception as e:
+            print(f"模型检查失败: {e}")
+    
+    def download_models_with_progress(self):
+        """带进度条的模型下载"""
+        # 这里可以实现一个进度条对话框
+        # 简化版本：直接调用下载
+        try:
+            success = self.model_manager.download_models()
+            if success:
+                QMessageBox.information(None, "下载完成", "模型文件下载完成！程序现已就绪。")
+            else:
+                QMessageBox.warning(None, "下载失败", "模型下载失败，请检查网络连接或稍后重试。")
+        except Exception as e:
+            QMessageBox.critical(None, "下载错误", f"下载过程出错: {e}")
         
     def setup_ui(self):
         """设置现代化UI界面"""
@@ -244,8 +316,8 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         
         # OCR结果选项卡 - 使用表格显示
         self.result_table = QTableWidget()
-        self.result_table.setColumnCount(5)
-        self.result_table.setHorizontalHeaderLabels(["文件路径", "开票公司名称", "发票号码", "发票日期", "金额(价税合计)"])
+        self.result_table.setColumnCount(6)
+        self.result_table.setHorizontalHeaderLabels(["文件路径", "开票公司名称", "发票号码", "发票日期", "项目名称", "金额（不含税）"])
         
         # 设置表格属性
         self.result_table.setAlternatingRowColors(True)
@@ -259,7 +331,8 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 开票公司名称列自适应内容
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 发票号码列自适应内容
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 发票日期列自适应内容
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 金额列自适应内容
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 项目名称列自适应内容
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 金额列自适应内容
         
         self.result_tabs.addTab(self.result_table, "📋 识别结果")
         
@@ -346,7 +419,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #45a049, stop:1 #3d8b40);
-                transform: translateY(-1px);
+                /* 移除不支持的transform属性 */
             }
             QPushButton:pressed {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -550,7 +623,27 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         
         # 填充表格数据
         for row, result in enumerate(self.accumulated_results):
-            if isinstance(result, list) and len(result) >= 5:
+            if isinstance(result, list) and len(result) >= 6:
+                # [文件路径, 开票公司名称, 发票号码, 发票日期, 金额（不含税）, 项目名称]
+                file_path = os.path.basename(str(result[0])) if result[0] else ""
+                company_name = str(result[1]) if result[1] else ""
+                invoice_number = str(result[2]) if result[2] else ""
+                invoice_date = str(result[3]) if result[3] else ""
+                invoice_amount = str(result[4]) if result[4] else ""  # 金额（不含税）
+                project_name = str(result[5]) if result[5] else ""  # 项目名称
+                
+                # 设置单元格内容
+                self.result_table.setItem(row, 0, QTableWidgetItem(file_path))
+                self.result_table.setItem(row, 1, QTableWidgetItem(company_name))
+                self.result_table.setItem(row, 2, QTableWidgetItem(invoice_number))
+                self.result_table.setItem(row, 3, QTableWidgetItem(invoice_date))
+                self.result_table.setItem(row, 4, QTableWidgetItem(project_name))  # 项目名称
+                self.result_table.setItem(row, 5, QTableWidgetItem(invoice_amount))  # 金额（不含税）
+                
+                # 设置工具提示显示完整路径
+                self.result_table.item(row, 0).setToolTip(str(result[0]))
+            elif isinstance(result, list) and len(result) >= 5:
+                # 兼容旧格式（5个字段）
                 # [文件路径, 开票公司名称, 发票号码, 日期, 金额(价税合计)]
                 file_path = os.path.basename(str(result[0])) if result[0] else ""
                 company_name = str(result[1]) if result[1] else ""
@@ -563,7 +656,8 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 self.result_table.setItem(row, 1, QTableWidgetItem(company_name))
                 self.result_table.setItem(row, 2, QTableWidgetItem(invoice_number))
                 self.result_table.setItem(row, 3, QTableWidgetItem(invoice_date))
-                self.result_table.setItem(row, 4, QTableWidgetItem(invoice_amount))
+                self.result_table.setItem(row, 4, QTableWidgetItem(""))  # 项目名称为空
+                self.result_table.setItem(row, 5, QTableWidgetItem(invoice_amount))
                 
                 # 设置工具提示显示完整路径
                 self.result_table.item(row, 0).setToolTip(str(result[0]))
@@ -599,13 +693,26 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 # 转换累积结果为DataFrame
                 data_list = []
                 for result in self.accumulated_results:
-                    if isinstance(result, list) and len(result) >= 5:
+                    if isinstance(result, list) and len(result) >= 6:
+                        # 新格式（6个字段）
                         data_dict = {
                             "文件路径": str(result[0]),
                             "开票公司名称": str(result[1]) if result[1] else "",
                             "发票号码": str(result[2]) if result[2] else "",
                             "发票日期": str(result[3]) if result[3] else "",
-                            "金额(价税合计)": result[4] if result[4] else ""
+                            "项目名称": str(result[5]) if result[5] else "",
+                            "金额（不含税）": str(result[4]) if result[4] else ""
+                        }
+                        data_list.append(data_dict)
+                    elif isinstance(result, list) and len(result) >= 5:
+                        # 兼容旧格式（5个字段）
+                        data_dict = {
+                            "文件路径": str(result[0]),
+                            "开票公司名称": str(result[1]) if result[1] else "",
+                            "发票号码": str(result[2]) if result[2] else "",
+                            "发票日期": str(result[3]) if result[3] else "",
+                            "项目名称": "",
+                            "金额（不含税）": result[4] if result[4] else ""
                         }
                         data_list.append(data_dict)
                 
@@ -739,12 +846,48 @@ def main():
     app.setApplicationVersion("2.0-Offline")
     app.setOrganizationName("OCR Tools")
     
-    # 创建并显示主窗口
-    main_window = OfflineInvoiceOCRMainWindow()
-    main_window.show()
-    
-    # 运行应用程序
-    sys.exit(app.exec_())
+    try:
+        # 首先检查和设置模型
+        print("检查AI模型配置...")
+        if not check_and_setup_models():
+            QMessageBox.critical(
+                None, 
+                "模型配置错误", 
+                "AI模型文件缺失或配置失败，程序无法正常运行。\n\n"
+                "请确保以下文件存在:\n"
+                "- models/PP-OCRv5_server_det/\n"
+                "- models/PP-OCRv5_server_rec/\n"
+                "- models/PP-LCNet_x1_0_textline_ori/\n\n"
+                "您可以:\n"
+                "1. 将现有模型文件夹复制到程序目录下\n"
+                "2. 重新运行程序并在模型配置界面中设置正确路径"
+            )
+            sys.exit(1)
+        
+        print("✅ 模型配置检查通过")
+        
+        # 创建并显示主窗口
+        main_window = OfflineInvoiceOCRMainWindow()
+        main_window.show()
+        
+        # 运行应用程序
+        sys.exit(app.exec_())
+        
+    except ImportError as e:
+        QMessageBox.critical(
+            None,
+            "依赖库错误", 
+            f"缺少必要的依赖库:\n{str(e)}\n\n"
+            "请运行 python install.py 安装所需依赖"
+        )
+        sys.exit(1)
+    except Exception as e:
+        QMessageBox.critical(
+            None,
+            "启动错误",
+            f"程序启动失败:\n{str(e)}"
+        )
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

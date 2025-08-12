@@ -21,16 +21,20 @@ class pdf2img:
         # 移除文件扩展名
         base_filename = filename[:-4] if filename.endswith('.pdf') else filename
         
-        # 替换中文字符和特殊字符，保留基本的ASCII字符
-        clean_filename = re.sub(r'[^\w\-_]', '_', base_filename, flags=re.ASCII)
+        # 更智能的文件名处理，支持中文字符
+        # 首先尝试保留原文件名，只替换系统不支持的字符
+        invalid_chars = r'[<>:"/\\|?*]'
+        clean_filename = re.sub(invalid_chars, '_', base_filename)
         
-        # 如果清理后的文件名为空或过短，使用原文件名的MD5哈希值
-        if len(clean_filename) < 3 or clean_filename == '___':
-            clean_filename = hashlib.md5(base_filename.encode('utf-8')).hexdigest()[:8]
+        # 如果文件名过长，截取前面部分并添加哈希
+        if len(clean_filename.encode('utf-8')) > 100:  # 考虑中文字符占用字节
+            # 保留前30个字符，添加哈希值确保唯一性
+            hash_suffix = hashlib.md5(base_filename.encode('utf-8')).hexdigest()[:8]
+            clean_filename = clean_filename[:30] + "_" + hash_suffix
         
-        # 限制文件名长度，避免路径过长
-        if len(clean_filename) > 50:
-            clean_filename = clean_filename[:47] + '...'
+        # 如果清理后的文件名为空，使用哈希值
+        if not clean_filename.strip() or len(clean_filename) < 1:
+            clean_filename = hashlib.md5(base_filename.encode('utf-8')).hexdigest()[:12]
             
         self.imagePath = f'IMG/{clean_filename}'
         
