@@ -25,7 +25,7 @@ def ocr_pdf_offline(pdf_path, precision_mode, output_dir=None):
         print(f"精度模式: {precision_mode}")
         
         # 创建结果DataFrame
-        invoice_info = DataFrame(columns=['文件地址', '开票公司', '发票号码', '日期', '金额（不含税）', '项目名称'])
+        invoice_info = DataFrame(columns=['文件地址', '开票公司', '发票号码', '日期', '金额（价税合计）', '项目名称'])
         
         # 转换PDF为图片
         print("正在将PDF转换为图片...")
@@ -96,7 +96,7 @@ def ocr_pdf_offline(pdf_path, precision_mode, output_dir=None):
                     row['开票公司'],     # 开票公司名称
                     row['发票号码'],     # 发票号码
                     row['日期'],        # 发票日期
-                    row['金额（不含税）'], # 发票金额
+                    row['金额（价税合计）'], # 发票金额
                     row['项目名称']      # 项目名称
                 ])
         
@@ -129,7 +129,7 @@ def ocr_images_offline(image_folder_path, precision_mode, output_dir=None):
         print(f"精度模式: {precision_mode}")
         
         # 创建结果DataFrame
-        invoice_info = DataFrame(columns=['文件地址', '开票公司', '发票号码', '日期', '金额（不含税）', '项目名称'])
+        invoice_info = DataFrame(columns=['文件地址', '开票公司', '发票号码', '日期', '金额（价税合计）', '项目名称'])
         
         # 初始化离线OCR识别器
         print("初始化离线OCR引擎...")
@@ -195,7 +195,7 @@ def ocr_images_offline(image_folder_path, precision_mode, output_dir=None):
                     row['开票公司'],     # 开票公司名称
                     row['发票号码'],     # 发票号码
                     row['日期'],        # 发票日期
-                    row['金额（不含税）'], # 发票金额
+                    row['金额（价税合计）'], # 发票金额
                     row['项目名称']      # 项目名称
                 ])
         

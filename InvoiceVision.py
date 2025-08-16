@@ -88,7 +88,13 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        
+        # 初始化调试日志
+        self.log_debug("=== InvoiceVision 启动 ===", "INFO")
+        
         self.offline_status = self.check_offline_status()
+        self.log_debug(f"离线状态: {self.offline_status}", "INFO")
+        
         self.output_dir = os.getcwd()  # 默认输出目录
         self.ocr_results = {}  # 存储OCR结果
         self.accumulated_results = []  # 累积所有识别结果
@@ -97,9 +103,12 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         self.model_manager = ModelManager()
         self.check_models_on_startup()
         
+        self.log_debug("设置用户界面...", "DEBUG")
         self.setup_ui()
         self.pdf_thread = None
         self.image_thread = None
+        
+        self.log_debug("初始化完成", "INFO")
         
     def check_offline_status(self):
         """检查离线模式状态"""
@@ -301,6 +310,24 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         
         control_layout.addWidget(model_group)
         
+        # 调试组
+        debug_group = QGroupBox("🔧 调试工具")
+        debug_layout = QVBoxLayout(debug_group)
+        
+        self.debug_btn = QPushButton("🐛 显示调试日志")
+        self.debug_btn.clicked.connect(self.show_debug_log)
+        debug_layout.addWidget(self.debug_btn)
+        
+        self.test_ocr_btn = QPushButton("🧪 测试OCR功能")
+        self.test_ocr_btn.clicked.connect(self.test_ocr_function)
+        debug_layout.addWidget(self.test_ocr_btn)
+        
+        self.diagnostic_btn = QPushButton("🔍 系统诊断")
+        self.diagnostic_btn.clicked.connect(self.run_system_diagnostic)
+        debug_layout.addWidget(self.diagnostic_btn)
+        
+        control_layout.addWidget(debug_group)
+        
         # 添加弹性空间
         control_layout.addStretch()
         
@@ -316,8 +343,8 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         
         # OCR结果选项卡 - 使用表格显示
         self.result_table = QTableWidget()
-        self.result_table.setColumnCount(6)
-        self.result_table.setHorizontalHeaderLabels(["文件路径", "开票公司名称", "发票号码", "发票日期", "项目名称", "金额（不含税）"])
+        self.result_table.setColumnCount(5)
+        self.result_table.setHorizontalHeaderLabels(["开票公司名称", "发票号码", "发票日期", "项目名称", "金额（价税合计）"])
         
         # 设置表格属性
         self.result_table.setAlternatingRowColors(True)
@@ -327,12 +354,11 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         
         # 设置列宽自适应
         header = self.result_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)  # 文件路径列自动伸缩
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 开票公司名称列自适应内容
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 发票号码列自适应内容
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 发票日期列自适应内容
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 项目名称列自适应内容
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 金额列自适应内容
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 开票公司名称列自适应内容
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 发票号码列自适应内容
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 发票日期列自适应内容
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 项目名称列自适应内容
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 金额列自适应内容
         
         self.result_tabs.addTab(self.result_table, "📋 识别结果")
         
@@ -341,6 +367,13 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         self.raw_data_text.setReadOnly(True)
         self.raw_data_text.setFont(QtGui.QFont("Consolas", 10))
         self.result_tabs.addTab(self.raw_data_text, "📊 原始数据")
+        
+        # 调试日志选项卡
+        self.debug_log_text = QTextEdit()
+        self.debug_log_text.setReadOnly(True)
+        self.debug_log_text.setFont(QtGui.QFont("Consolas", 9))
+        self.debug_log_text.setStyleSheet("QTextEdit { background-color: #1e1e1e; color: #ffffff; }")
+        self.result_tabs.addTab(self.debug_log_text, "🔍 调试日志")
         
         result_layout.addWidget(self.result_tabs)
         
@@ -624,40 +657,44 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         # 填充表格数据
         for row, result in enumerate(self.accumulated_results):
             if isinstance(result, list) and len(result) >= 6:
-                # [文件路径, 开票公司名称, 发票号码, 发票日期, 金额（不含税）, 项目名称]
-                file_path = os.path.basename(str(result[0])) if result[0] else ""
+                # [文件路径, 开票公司名称, 发票号码, 发票日期, 金额（价税合计）, 项目名称]
                 company_name = str(result[1]) if result[1] else ""
+                # 清理开票公司名称的前缀
+                if company_name.startswith("名称："):
+                    company_name = company_name[3:]  # 去掉"名称："前缀
+                
                 invoice_number = str(result[2]) if result[2] else ""
                 invoice_date = str(result[3]) if result[3] else ""
-                invoice_amount = str(result[4]) if result[4] else ""  # 金额（不含税）
+                invoice_amount = str(result[4]) if result[4] else ""  # 金额（价税合计）
                 project_name = str(result[5]) if result[5] else ""  # 项目名称
                 
-                # 设置单元格内容
-                self.result_table.setItem(row, 0, QTableWidgetItem(file_path))
-                self.result_table.setItem(row, 1, QTableWidgetItem(company_name))
-                self.result_table.setItem(row, 2, QTableWidgetItem(invoice_number))
-                self.result_table.setItem(row, 3, QTableWidgetItem(invoice_date))
-                self.result_table.setItem(row, 4, QTableWidgetItem(project_name))  # 项目名称
-                self.result_table.setItem(row, 5, QTableWidgetItem(invoice_amount))  # 金额（不含税）
+                # 设置单元格内容（去掉文件路径列）
+                self.result_table.setItem(row, 0, QTableWidgetItem(company_name))
+                self.result_table.setItem(row, 1, QTableWidgetItem(invoice_number))
+                self.result_table.setItem(row, 2, QTableWidgetItem(invoice_date))
+                self.result_table.setItem(row, 3, QTableWidgetItem(project_name))  # 项目名称
+                self.result_table.setItem(row, 4, QTableWidgetItem(invoice_amount))  # 金额（价税合计）
                 
                 # 设置工具提示显示完整路径
                 self.result_table.item(row, 0).setToolTip(str(result[0]))
             elif isinstance(result, list) and len(result) >= 5:
                 # 兼容旧格式（5个字段）
                 # [文件路径, 开票公司名称, 发票号码, 日期, 金额(价税合计)]
-                file_path = os.path.basename(str(result[0])) if result[0] else ""
                 company_name = str(result[1]) if result[1] else ""
+                # 清理开票公司名称的前缀
+                if company_name.startswith("名称："):
+                    company_name = company_name[3:]  # 去掉"名称："前缀
+                
                 invoice_number = str(result[2]) if result[2] else ""
                 invoice_date = str(result[3]) if result[3] else ""
                 invoice_amount = str(result[4]) if result[4] else ""
                 
-                # 设置单元格内容
-                self.result_table.setItem(row, 0, QTableWidgetItem(file_path))
-                self.result_table.setItem(row, 1, QTableWidgetItem(company_name))
-                self.result_table.setItem(row, 2, QTableWidgetItem(invoice_number))
-                self.result_table.setItem(row, 3, QTableWidgetItem(invoice_date))
-                self.result_table.setItem(row, 4, QTableWidgetItem(""))  # 项目名称为空
-                self.result_table.setItem(row, 5, QTableWidgetItem(invoice_amount))
+                # 设置单元格内容（去掉文件路径列）
+                self.result_table.setItem(row, 0, QTableWidgetItem(company_name))
+                self.result_table.setItem(row, 1, QTableWidgetItem(invoice_number))
+                self.result_table.setItem(row, 2, QTableWidgetItem(invoice_date))
+                self.result_table.setItem(row, 3, QTableWidgetItem(""))  # 项目名称为空
+                self.result_table.setItem(row, 4, QTableWidgetItem(invoice_amount))  # 金额（价税合计）
                 
                 # 设置工具提示显示完整路径
                 self.result_table.item(row, 0).setToolTip(str(result[0]))
@@ -672,7 +709,270 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         self.ocr_results = {}
         self.result_table.setRowCount(0)
         self.raw_data_text.clear()
+        self.debug_log_text.clear()
         self.export_btn.setEnabled(False)
+    
+    def log_debug(self, message, level="INFO"):
+        """添加调试日志"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_entry = f"[{timestamp}] [{level}] {message}\n"
+        
+        # 在控制台输出
+        print(log_entry.strip())
+        
+        # 在调试日志窗口显示（如果组件已经创建）
+        if hasattr(self, 'debug_log_text') and self.debug_log_text:
+            self.debug_log_text.moveCursor(QtGui.QTextCursor.End)
+            self.debug_log_text.insertPlainText(log_entry)
+            self.debug_log_text.ensureCursorVisible()
+    
+    def show_debug_log(self):
+        """显示调试日志窗口"""
+        self.result_tabs.setCurrentWidget(self.debug_log_text)
+        self.log_debug("调试日志窗口已打开", "DEBUG")
+    
+    def test_ocr_function(self):
+        """测试OCR功能"""
+        self.log_debug("开始测试OCR功能...", "INFO")
+        self.result_tabs.setCurrentWidget(self.debug_log_text)
+        
+        try:
+            # 导入OCR模块
+            self.log_debug("导入OCRInvoice模块...", "DEBUG")
+            import OCRInvoice
+            
+            self.log_debug("创建OCR实例...", "DEBUG")
+            ocr = OCRInvoice.OfflineOCRInvoice()
+            
+            self.log_debug("检查离线配置...", "DEBUG")
+            self.log_debug(f"配置信息: {ocr.offline_config}", "DEBUG")
+            
+            self.log_debug("检查模型文件...", "DEBUG")
+            models_available, model_message = ocr.check_models_available()
+            if models_available:
+                self.log_debug("✅ 模型文件检查通过", "INFO")
+            else:
+                self.log_debug(f"❌ 模型文件检查失败: {model_message}", "ERROR")
+                return
+            
+            self.log_debug("初始化OCR引擎...", "DEBUG")
+            if ocr.initialize_ocr():
+                self.log_debug("✅ OCR引擎初始化成功", "INFO")
+                
+                # 创建测试图片
+                self.log_debug("创建测试图片...", "DEBUG")
+                from PIL import Image
+                import numpy as np
+                
+                test_img = Image.new('RGB', (200, 100), color='white')
+                test_img_array = np.array(test_img)
+                
+                self.log_debug("执行OCR识别...", "DEBUG")
+                try:
+                    result = ocr.ocr_engine.ocr(test_img_array)
+                    self.log_debug(f"✅ OCR识别成功: {result}", "INFO")
+                except Exception as ocr_error:
+                    self.log_debug(f"❌ OCR识别失败: {str(ocr_error)}", "ERROR")
+                    import traceback
+                    self.log_debug(f"OCR错误详情: {traceback.format_exc()}", "ERROR")
+                    
+            else:
+                self.log_debug("❌ OCR引擎初始化失败", "ERROR")
+                
+        except Exception as e:
+            self.log_debug(f"❌ OCR功能测试失败: {str(e)}", "ERROR")
+            import traceback
+            self.log_debug(f"错误详情:\n{traceback.format_exc()}", "ERROR")
+    
+    def run_system_diagnostic(self):
+        """运行系统诊断"""
+        self.log_debug("开始系统诊断...", "INFO")
+        self.result_tabs.setCurrentWidget(self.debug_log_text)
+        
+        try:
+            # 检查Python环境
+            self.log_debug(f"Python版本: {sys.version}", "INFO")
+            self.log_debug(f"当前工作目录: {os.getcwd()}", "INFO")
+            self.log_debug(f"可执行路径: {sys.executable}", "INFO")
+            
+            # 检查关键模块
+            critical_modules = [
+                ('PyQt5', 'PyQt5.QtWidgets'),
+                ('NumPy', 'numpy'),
+                ('Pandas', 'pandas'),
+                ('PIL', 'PIL'),
+                ('OpenCV', 'cv2'),
+                ('PyMuPDF', 'fitz'),
+                ('scikit-image', 'skimage')
+            ]
+            
+            # PaddleOCR 相关模块 - 一次性检查所有依赖
+            paddle_modules = [
+                ('PaddleOCR', 'paddleocr'),
+                ('PaddlePaddle', 'paddle'),
+                ('huggingface_hub', 'huggingface_hub'),
+                ('paddlex', 'paddlex'),
+                ('paddlex.inference', 'paddlex.inference'),
+                ('paddlex.modules', 'paddlex.modules'),
+                ('paddlex.repo_apis', 'paddlex.repo_apis'),
+                ('paddlex.repo_apis.base', 'paddlex.repo_apis.base'),
+                ('paddlex.modules.doc_vlm', 'paddlex.modules.doc_vlm'),
+                ('paddlex.modules.formula_recognition', 'paddlex.modules.formula_recognition'),
+                ('paddlex.utils.misc', 'paddlex.utils.misc'),
+            ]
+            
+            self.log_debug("检查关键模块依赖:", "INFO")
+            critical_errors = []
+            for name, module in critical_modules:
+                try:
+                    __import__(module)
+                    self.log_debug(f"  ✅ {name}", "INFO")
+                except ImportError as e:
+                    self.log_debug(f"  ❌ {name}: {str(e)}", "ERROR")
+                    critical_errors.append((name, str(e)))
+            
+            self.log_debug("检查PaddleOCR相关模块:", "INFO")
+            paddle_errors = []
+            
+            # 使用更robust的方法检查PaddleOCR相关模块
+            for name, module in paddle_modules:
+                try:
+                    # 特殊处理PaddleOCR主模块
+                    if module == 'paddleocr':
+                        try:
+                            __import__(module)
+                            self.log_debug(f"  ✅ {name}", "INFO")
+                        except ImportError as e:
+                            self.log_debug(f"  ❌ {name}: {str(e)}", "ERROR")
+                            paddle_errors.append((name, str(e)))
+                    else:
+                        # 对于子模块，使用更安全的检查方式
+                        try:
+                            # 先检查父模块
+                            parent_module = module.split('.')[0]
+                            __import__(parent_module)
+                            
+                            # 然后尝试检查子模块
+                            try:
+                                __import__(module)
+                                self.log_debug(f"  ✅ {name}", "INFO")
+                            except ImportError as e:
+                                self.log_debug(f"  ❌ {name}: {str(e)}", "ERROR")
+                                paddle_errors.append((name, str(e)))
+                        except ImportError as e:
+                            self.log_debug(f"  ❌ {name}: {parent_module} 主模块缺失", "ERROR")
+                            paddle_errors.append((name, f"父模块 {parent_module} 缺失"))
+                except Exception as e:
+                    # 捕获其他异常，防止程序中断
+                    self.log_debug(f"  ❌ {name}: {str(e)}", "ERROR")
+                    paddle_errors.append((name, str(e)))
+            
+            # 额外检查常见的PaddleX子模块
+            try:
+                import pkgutil
+                self.log_debug("检测PaddleX子模块:", "INFO")
+                try:
+                    import paddlex
+                    for _, name, _ in pkgutil.iter_modules(paddlex.__path__):
+                        full_module = f'paddlex.{name}'
+                        try:
+                            __import__(full_module)
+                            self.log_debug(f"  ✅ {full_module}", "INFO")
+                        except ImportError as e:
+                            self.log_debug(f"  ❌ {full_module}: {str(e)}", "ERROR")
+                            paddle_errors.append((full_module, str(e)))
+                except ImportError:
+                    self.log_debug("  ❌ paddlex 主模块不可用", "ERROR")
+                    paddle_errors.append(('paddlex', 'paddlex 主模块不可用'))
+            except Exception as e:
+                self.log_debug(f"  ⚠️ 无法自动检测PaddleX子模块: {str(e)}", "WARNING")
+            
+            # 一次性显示所有导入错误汇总
+            all_errors = critical_errors + paddle_errors
+            if all_errors:
+                self.log_debug("", "INFO")
+                self.log_debug("=== 系统导入错误汇总 ===", "ERROR")
+                self.log_debug(f"共发现 {len(all_errors)} 个模块导入失败:", "ERROR")
+                
+                # 分组显示错误
+                if critical_errors:
+                    self.log_debug("关键模块错误:", "ERROR")
+                    for name, error in critical_errors:
+                        self.log_debug(f"  - {name}: {error}", "ERROR")
+                
+                if paddle_errors:
+                    self.log_debug("PaddleOCR相关模块错误:", "ERROR")
+                    for name, error in paddle_errors:
+                        self.log_debug(f"  - {name}: {error}", "ERROR")
+                
+                self.log_debug("", "ERROR")
+                
+                # 提供解决方案建议
+                if critical_errors:
+                    self.log_debug("关键模块解决方案:", "ERROR")
+                    self.log_debug("请安装缺失的关键模块:", "ERROR")
+                    self.log_debug("pip install numpy pandas pillow opencv-contrib-python pymupdf scikit-image", "ERROR")
+                
+                if paddle_errors:
+                    self.log_debug("PaddleOCR模块解决方案:", "ERROR")
+                    self.log_debug("请将缺失的PaddleOCR相关模块添加到 InvoiceVision.spec 的 hiddenimports 中:", "ERROR")
+                    hiddenimports_list = [module for name, module in paddle_errors]
+                    self.log_debug(f"  {', '.join(hiddenimports_list)}", "ERROR")
+            
+            # 检查模型文件
+            self.log_debug("检查模型文件:", "INFO")
+            model_paths = [
+                "models/PP-OCRv5_server_det",
+                "models/PP-OCRv5_server_rec", 
+                "models/PP-LCNet_x1_0_textline_ori"
+            ]
+            
+            for model_path in model_paths:
+                if os.path.exists(model_path):
+                    self.log_debug(f"  ✅ {model_path}", "INFO")
+                    # 检查关键文件
+                    required_files = ["inference.pdiparams", "inference.yml"]
+                    for file in required_files:
+                        file_path = os.path.join(model_path, file)
+                        if os.path.exists(file_path):
+                            self.log_debug(f"    ✅ {file}", "INFO")
+                        else:
+                            self.log_debug(f"    ❌ {file}", "ERROR")
+                else:
+                    self.log_debug(f"  ❌ {model_path}", "ERROR")
+            
+            # 检查配置文件
+            self.log_debug("检查配置文件:", "INFO")
+            if os.path.exists("offline_config.json"):
+                self.log_debug("  ✅ offline_config.json", "INFO")
+                try:
+                    import json
+                    with open("offline_config.json", 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                        self.log_debug(f"  配置内容: {config}", "DEBUG")
+                except Exception as e:
+                    self.log_debug(f"  ❌ 配置文件读取失败: {str(e)}", "ERROR")
+            else:
+                self.log_debug("  ❌ offline_config.json 不存在", "ERROR")
+            
+            # 检查系统DLL
+            self.log_debug("检查系统DLL:", "INFO")
+            import subprocess
+            try:
+                result = subprocess.run(['where', 'vcruntime140.dll'], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    self.log_debug(f"  ✅ vcruntime140.dll: {result.stdout.strip()}", "INFO")
+                else:
+                    self.log_debug("  ❌ vcruntime140.dll: 未找到", "WARNING")
+            except Exception as e:
+                self.log_debug(f"  ❌ 检查vcruntime140.dll失败: {str(e)}", "ERROR")
+            
+            self.log_debug("系统诊断完成", "INFO")
+            
+        except Exception as e:
+            self.log_debug(f"系统诊断失败: {str(e)}", "ERROR")
+            import traceback
+            self.log_debug(f"错误详情:\n{traceback.format_exc()}", "ERROR")
     
     def export_results(self):
         """导出结果到Excel"""
@@ -695,24 +995,32 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 for result in self.accumulated_results:
                     if isinstance(result, list) and len(result) >= 6:
                         # 新格式（6个字段）
+                        company_name = str(result[1]) if result[1] else ""
+                        # 清理开票公司名称的前缀
+                        if company_name.startswith("名称："):
+                            company_name = company_name[3:]  # 去掉"名称："前缀
+                        
                         data_dict = {
-                            "文件路径": str(result[0]),
-                            "开票公司名称": str(result[1]) if result[1] else "",
+                            "开票公司名称": company_name,
                             "发票号码": str(result[2]) if result[2] else "",
                             "发票日期": str(result[3]) if result[3] else "",
                             "项目名称": str(result[5]) if result[5] else "",
-                            "金额（不含税）": str(result[4]) if result[4] else ""
+                            "金额（价税合计）": str(result[4]) if result[4] else ""
                         }
                         data_list.append(data_dict)
                     elif isinstance(result, list) and len(result) >= 5:
                         # 兼容旧格式（5个字段）
+                        company_name = str(result[1]) if result[1] else ""
+                        # 清理开票公司名称的前缀
+                        if company_name.startswith("名称："):
+                            company_name = company_name[3:]  # 去掉"名称："前缀
+                        
                         data_dict = {
-                            "文件路径": str(result[0]),
-                            "开票公司名称": str(result[1]) if result[1] else "",
+                            "开票公司名称": company_name,
                             "发票号码": str(result[2]) if result[2] else "",
                             "发票日期": str(result[3]) if result[3] else "",
                             "项目名称": "",
-                            "金额（不含税）": result[4] if result[4] else ""
+                            "金额（价税合计）": result[4] if result[4] else ""
                         }
                         data_list.append(data_dict)
                 
@@ -728,6 +1036,8 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
     
     def handle_pdf_file(self):
         """处理PDF文件"""
+        self.log_debug("准备处理PDF文件...", "INFO")
+        
         file_path, _ = QFileDialog.getOpenFileName(
             self, 
             '选择PDF文件', 
@@ -736,27 +1046,41 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         )
         
         if file_path:
+            self.log_debug(f"选择的PDF文件: {file_path}", "INFO")
             precision_mode = self.precision_combo.currentText()
+            self.log_debug(f"精度模式: {precision_mode}", "DEBUG")
             
-            # 创建并启动PDF处理线程
-            self.pdf_thread = PDFOCRThread()
-            self.pdf_thread.file_path = file_path
-            self.pdf_thread.precision_mode = precision_mode
-            self.pdf_thread.output_dir = self.output_dir  # 设置输出目录
-            self.pdf_thread.progress.connect(self.update_status)
-            self.pdf_thread.result.connect(self.on_processing_result)
-            self.pdf_thread.finished.connect(self.on_processing_finished)
-            self.pdf_thread.ocr_result.connect(self.display_ocr_results)  # 连接结果显示
-            
-            # 禁用按钮，显示进度条，开始处理
-            self.set_buttons_enabled(False)
-            self.progress_bar.setVisible(True)
-            self.progress_bar.setRange(0, 0)  # 不确定进度
-            self.update_status(f"📄 开始处理PDF: {os.path.basename(file_path)}")
-            self.pdf_thread.start()
+            try:
+                # 创建并启动PDF处理线程
+                self.pdf_thread = PDFOCRThread()
+                self.pdf_thread.file_path = file_path
+                self.pdf_thread.precision_mode = precision_mode
+                self.pdf_thread.output_dir = self.output_dir  # 设置输出目录
+                self.pdf_thread.progress.connect(self.update_status)
+                self.pdf_thread.result.connect(self.on_processing_result)
+                self.pdf_thread.finished.connect(self.on_processing_finished)
+                self.pdf_thread.ocr_result.connect(self.display_ocr_results)  # 连接结果显示
+                
+                # 禁用按钮，显示进度条，开始处理
+                self.set_buttons_enabled(False)
+                self.progress_bar.setVisible(True)
+                self.progress_bar.setRange(0, 0)  # 不确定进度
+                self.update_status(f"📄 开始处理PDF: {os.path.basename(file_path)}")
+                self.log_debug("启动PDF处理线程...", "DEBUG")
+                self.pdf_thread.start()
+                
+            except Exception as e:
+                self.log_debug(f"PDF处理失败: {str(e)}", "ERROR")
+                import traceback
+                self.log_debug(f"错误详情:\n{traceback.format_exc()}", "ERROR")
+                QMessageBox.critical(self, "错误", f"PDF处理失败:\n{str(e)}")
+        else:
+            self.log_debug("用户取消了PDF文件选择", "DEBUG")
     
     def handle_image_folder(self):
         """处理图片文件夹"""
+        self.log_debug("准备处理图片文件夹...", "INFO")
+        
         folder_path = QFileDialog.getExistingDirectory(
             self, 
             '选择包含图片的文件夹', 
@@ -764,24 +1088,36 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         )
         
         if folder_path:
+            self.log_debug(f"选择的图片文件夹: {folder_path}", "INFO")
             precision_mode = self.precision_combo.currentText()
+            self.log_debug(f"精度模式: {precision_mode}", "DEBUG")
             
-            # 创建并启动图片处理线程
-            self.image_thread = ImageOCRThread()
-            self.image_thread.file_path = folder_path
-            self.image_thread.precision_mode = precision_mode
-            self.image_thread.output_dir = self.output_dir  # 设置输出目录
-            self.image_thread.progress.connect(self.update_status)
-            self.image_thread.result.connect(self.on_processing_result)
-            self.image_thread.finished.connect(self.on_processing_finished)
-            self.image_thread.ocr_result.connect(self.display_ocr_results)  # 连接结果显示
-            
-            # 禁用按钮，显示进度条，开始处理
-            self.set_buttons_enabled(False)
-            self.progress_bar.setVisible(True)
-            self.progress_bar.setRange(0, 0)  # 不确定进度
-            self.update_status(f"🖼️ 开始处理文件夹: {os.path.basename(folder_path)}")
-            self.image_thread.start()
+            try:
+                # 创建并启动图片处理线程
+                self.image_thread = ImageOCRThread()
+                self.image_thread.file_path = folder_path
+                self.image_thread.precision_mode = precision_mode
+                self.image_thread.output_dir = self.output_dir  # 设置输出目录
+                self.image_thread.progress.connect(self.update_status)
+                self.image_thread.result.connect(self.on_processing_result)
+                self.image_thread.finished.connect(self.on_processing_finished)
+                self.image_thread.ocr_result.connect(self.display_ocr_results)  # 连接结果显示
+                
+                # 禁用按钮，显示进度条，开始处理
+                self.set_buttons_enabled(False)
+                self.progress_bar.setVisible(True)
+                self.progress_bar.setRange(0, 0)  # 不确定进度
+                self.update_status(f"🖼️ 开始处理文件夹: {os.path.basename(folder_path)}")
+                self.log_debug("启动图片处理线程...", "DEBUG")
+                self.image_thread.start()
+                
+            except Exception as e:
+                self.log_debug(f"图片处理失败: {str(e)}", "ERROR")
+                import traceback
+                self.log_debug(f"错误详情:\n{traceback.format_exc()}", "ERROR")
+                QMessageBox.critical(self, "错误", f"图片处理失败:\n{str(e)}")
+        else:
+            self.log_debug("用户取消了图片文件夹选择", "DEBUG")
     
     def update_status(self, message):
         """更新状态显示"""

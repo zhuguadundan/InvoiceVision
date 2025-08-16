@@ -167,29 +167,146 @@ def check_disk_space():
 def run_test_import():
     """运行测试导入"""
     print("\n测试关键模块导入...")
-    test_modules = [
+    
+    # 分组检查，避免PaddleOCR中断其他检查
+    basic_modules = [
         'PyQt5.QtWidgets',
-        'paddleocr',
         'pandas',
-        'fitz',
+        'fitz'
+    ]
+    
+    paddle_modules = [
+        'paddleocr'
+    ]
+    
+    custom_modules = [
         'OCRInvoice',
-        'ModelManager',
+        'ModelManager', 
         'MainAction',
         'PDF2IMG'
     ]
     
     failed_imports = []
     
-    for module_name in test_modules:
+    # 检查基础模块
+    print("检查基础模块...")
+    for module_name in basic_modules:
         try:
             __import__(module_name)
             print(f"[OK] {module_name}")
         except Exception as e:
             print(f"[ERROR] {module_name}: {e}")
-            failed_imports.append(module_name)
+            failed_imports.append((module_name, str(e)))
+    
+    # 检查PaddleOCR模块
+    print("检查OCR模块...")
+    for module_name in paddle_modules:
+        try:
+            __import__(module_name)
+            print(f"[OK] {module_name}")
+        except Exception as e:
+            print(f"[ERROR] {module_name}: {e}")
+            failed_imports.append((module_name, str(e)))
+    
+    # 检查自定义模块
+    print("检查自定义模块...")
+    for module_name in custom_modules:
+        try:
+            __import__(module_name)
+            print(f"[OK] {module_name}")
+        except Exception as e:
+            print(f"[ERROR] {module_name}: {e}")
+            failed_imports.append((module_name, str(e)))
+    
+    # 额外检查PaddleOCR相关子模块
+    print("检查PaddleOCR子模块...")
+    paddle_submodules = [
+        'paddlex',
+        'paddlex.modules', 
+        'paddlex.modules.doc_vlm',
+        'paddlex.modules.formula_recognition',
+        'paddlex.utils.misc'
+    ]
+    
+    for module_name in paddle_submodules:
+        try:
+            # 只有paddleocr成功导入才检查子模块
+            paddleocr_ok = all('paddleocr' not in f[0] for f in failed_imports)
+            if paddleocr_ok:
+                # 先检查父模块
+                parent_module = module_name.split('.')[0]
+                try:
+                    __import__(parent_module)
+                    __import__(module_name)
+                    print(f"[OK] {module_name}")
+                except ImportError as e:
+                    print(f"[ERROR] {module_name}: {e}")
+                    failed_imports.append((module_name, str(e)))
+            else:
+                print(f"[SKIP] {module_name}: PaddleOCR 主模块缺失")
+        except Exception as e:
+            print(f"[ERROR] {module_name}: {e}")
+            failed_imports.append((module_name, str(e)))
     
     if failed_imports:
-        print(f"\n[ERROR] {len(failed_imports)} 个模块导入失败")
+        print(f"\n=== 系统导入错误汇总 ===")
+        print(f"共发现 {len(failed_imports)} 个模块导入失败:")
+        
+        # 分类显示错误
+        framework_errors = [e for e in failed_imports if e[0] in ['PyQt5.QtWidgets']]
+        paddle_errors = [e for e in failed_imports if e[0] in ['paddleocr']]
+        data_errors = [e for e in failed_imports if e[0] in ['pandas']]
+        pdf_errors = [e for e in failed_imports if e[0] in ['fitz']]
+        custom_errors = [e for e in failed_imports if e[0] in ['OCRInvoice', 'ModelManager', 'MainAction', 'PDF2IMG']]
+        
+        if framework_errors:
+            print("GUI框架错误:")
+            for module, error in framework_errors:
+                print(f"  - {module}: {error}")
+        
+        if paddle_errors:
+            print("OCR引擎错误:")
+            for module, error in paddle_errors:
+                print(f"  - {module}: {error}")
+        
+        if data_errors:
+            print("数据处理错误:")
+            for module, error in data_errors:
+                print(f"  - {module}: {error}")
+        
+        if pdf_errors:
+            print("PDF处理错误:")
+            for module, error in pdf_errors:
+                print(f"  - {module}: {error}")
+        
+        if custom_errors:
+            print("自定义模块错误:")
+            for module, error in custom_errors:
+                print(f"  - {module}: {error}")
+        
+        # 提供解决方案建议
+        print("\n解决方案建议:")
+        if framework_errors:
+            print("GUI框架安装命令:")
+            print("pip install PyQt5")
+        
+        if paddle_errors:
+            print("PaddleOCR安装命令:")
+            print("pip install paddleocr paddlepaddle")
+            print("如果已打包到exe，请将缺失模块添加到 .spec 文件的 hiddenimports 中")
+        
+        if data_errors:
+            print("数据处理安装命令:")
+            print("pip install pandas")
+        
+        if pdf_errors:
+            print("PDF处理安装命令:")
+            print("pip install pymupdf")
+        
+        if custom_errors:
+            print("自定义模块错误:")
+            print("请确保项目结构完整，所有自定义模块文件存在")
+        
         return False
     
     print("[OK] 所有模块导入成功")

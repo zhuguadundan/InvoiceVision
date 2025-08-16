@@ -8,12 +8,20 @@
 # 延迟导入 - 避免启动时就加载PaddleOCR
 # from paddleocr import PaddleOCR  # 移到使用时导入
 import re
+import sys
 from PIL import Image
 import os
 import json
 import numpy as np
 import cv2
 from pathlib import Path
+
+def safe_print(text):
+    """安全的打印函数，处理编码问题"""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(text.encode('gbk', 'ignore').decode('gbk'))
 
 class OfflineOCRInvoice:
     def __init__(self):
@@ -24,15 +32,25 @@ class OfflineOCRInvoice:
         
     def _load_offline_config(self):
         """加载离线配置 - 支持外部模型架构"""
-        base_dir = Path(__file__).parent
-        config_file = base_dir / "offline_config.json"
+        try:
+            # 导入resource_utils模块，支持打包环境
+            import resource_utils
+            base_dir = Path(resource_utils.get_resource_path("."))
+            config_file = Path(resource_utils.get_config_path())
+            # 使用resource_utils获取正确的模型路径
+            models_path = Path(resource_utils.get_models_path())
+        except ImportError:
+            # 降级到原始逻辑
+            base_dir = Path(__file__).parent
+            config_file = base_dir / "offline_config.json"
+            models_path = base_dir / "models"
         
         # 默认配置
         default_config = {
             "offline_mode": True,
             "use_gpu": False,
             "lang": "ch",
-            "models_path": "models"
+            "models_path": str(models_path)
         }
         
         if config_file.exists():
@@ -51,14 +69,10 @@ class OfflineOCRInvoice:
         else:
             config = default_config
             
-        # 确保模型路径是绝对路径
-        models_path = Path(config.get("models_path", "models"))
-        if not models_path.is_absolute():
-            models_path = base_dir / models_path
-            
+        # 使用resource_utils提供的模型路径，覆盖配置文件中的相对路径
         config["models_path"] = str(models_path)
         
-        # 构建模型路径
+        # 构建模型路径 - 使用正确的models_path
         if "models" not in config:
             config["models"] = {
                 "cls_model_dir": str(models_path / "PP-LCNet_x1_0_textline_ori"),
@@ -66,10 +80,10 @@ class OfflineOCRInvoice:
                 "rec_model_dir": str(models_path / "PP-OCRv5_server_rec")
             }
         else:
-            # 确保模型路径为绝对路径
+            # 确保模型路径为绝对路径，使用正确的models_path
             for key, model_path in config["models"].items():
-                if not Path(model_path).is_absolute():
-                    config["models"][key] = str(models_path / Path(model_path).name)
+                model_name = Path(model_path).name
+                config["models"][key] = str(models_path / model_name)
         
         return config
     
@@ -78,19 +92,60 @@ class OfflineOCRInvoice:
         if not self.offline_config or "models" not in self.offline_config:
             return False, "配置文件中未找到模型配置"
             
+        print(f"[DEBUG] 模型基础路径: {self.offline_config.get('models_path', 'N/A')}")
+        
         missing_models = []
+        incomplete_models = []
+        
         for model_name, model_path in self.offline_config["models"].items():
+            print(f"[DEBUG] 检查模型 {model_name}: {model_path}")
+            
             if not os.path.exists(model_path):
                 missing_models.append(f"{model_name}: {model_path}")
+                print(f"  [ERROR] 路径不存在")
+            else:
+                # 检查模型文件是否完整
+                try:
+                    files = os.listdir(model_path)
+                    # 支持两种模型格式：新格式(inference.json)和旧格式(inference.pdmodel)
+                    required_files_new = ['inference.json', 'inference.pdiparams']  # 新格式
+                    required_files_old = ['inference.pdmodel', 'inference.pdiparams']  # 旧格式
+                    
+                    missing_files_new = [f for f in required_files_new if f not in files]
+                    missing_files_old = [f for f in required_files_old if f not in files]
+                    
+                    if not missing_files_new:
+                        print(f"  [OK] 模型文件完整 (新格式)")
+                        print(f"    文件列表: {files}")
+                    elif not missing_files_old:
+                        print(f"  [OK] 模型文件完整 (旧格式)")
+                        print(f"    文件列表: {files}")
+                    else:
+                        incomplete_models.append(f"{model_name}: 缺少文件 (新格式需要{missing_files_new} 或 旧格式需要{missing_files_old})")
+                        print(f"  [ERROR] 缺少必需文件:")
+                        print(f"    新格式缺少: {missing_files_new}")
+                        print(f"    旧格式缺少: {missing_files_old}")
+                        print(f"    当前文件: {files}")
+                except Exception as e:
+                    incomplete_models.append(f"{model_name}: 读取错误 {e}")
+                    print(f"  [ERROR] 读取错误: {e}")
                 
+        error_messages = []
         if missing_models:
-            return False, f"缺少模型文件:\n" + "\n".join(missing_models)
+            error_messages.append("缺少模型文件夹:\n" + "\n".join(missing_models))
+        if incomplete_models:
+            error_messages.append("模型文件不完整:\n" + "\n".join(incomplete_models))
+            
+        if error_messages:
+            return False, "\n\n".join(error_messages)
             
         return True, "所有模型文件已就绪"
     
     def initialize_ocr(self):
         """初始化OCR引擎 - 使用外部模型"""
         try:
+            print(f"开始初始化OCR引擎，当前精度模式: {self.precision_mode}")
+            
             # 首先检查模型是否可用
             models_available, message = self.check_models_available()
             if not models_available:
@@ -104,9 +159,8 @@ class OfflineOCRInvoice:
                 if self.precision_mode == '快速':
                     # 快速模式：只使用检测和识别模型
                     params = {
-                        "use_textline_orientation": False,  # 新API参数名
+                        "use_textline_orientation": False,
                         "lang": "ch"
-                        # 移除不支持的 use_gpu 参数
                     }
                     
                     if "det_model_dir" in models and os.path.exists(models["det_model_dir"]):
@@ -120,9 +174,8 @@ class OfflineOCRInvoice:
                 else:
                     # 高精度模式：使用所有可用模型
                     params = {
-                        "use_textline_orientation": True,  # 新API参数名
+                        "use_textline_orientation": True,
                         "lang": "ch"
-                        # 移除不支持的 use_gpu 参数
                     }
                     
                     if "det_model_dir" in models and os.path.exists(models["det_model_dir"]):
@@ -135,37 +188,26 @@ class OfflineOCRInvoice:
                         params["cls_model_dir"] = models["cls_model_dir"]
                 
                 print(f"初始化离线OCR引擎 - 模式: {self.precision_mode}")
-                print(f"OCR参数: {params}")
                 
                 # 延迟导入PaddleOCR，避免启动时模块加载问题
                 try:
-                    print("正在导入PaddleOCR...")
                     # 设置环境变量，解决exe环境下可能的库冲突
-                    # import os  # os已经在文件顶部导入了，不需要重复导入
                     os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+                    os.environ['PADDLE_DISABLE_SHARED_MEM'] = '1'
+                    os.environ['CUDA_VISIBLE_DEVICES'] = ''
                     
                     from paddleocr import PaddleOCR
                     print("PaddleOCR导入成功，正在初始化...")
+                    
                     self.ocr_engine = PaddleOCR(**params)
                     print("SUCCESS: 离线OCR引擎初始化成功")
                     return True
                 except ImportError as e:
                     print(f"ERROR: PaddleOCR导入失败: {e}")
-                    print("可能的原因:")
-                    print("1. PaddleOCR未正确打包到exe中")
-                    print("2. 缺少相关依赖库")
                     return False
                 except Exception as e:
                     print(f"ERROR: PaddleOCR初始化失败: {e}")
                     print(f"错误类型: {type(e).__name__}")
-                    print("详细错误信息:")
-                    import traceback
-                    traceback.print_exc()
-                    print("可能的原因:")
-                    print("1. 模型文件路径问题")
-                    print("2. 模型文件损坏")
-                    print("3. 内存不足") 
-                    print("4. PaddleOCR版本兼容性问题")
                     return False
             else:
                 print("ERROR: 未找到有效的离线配置")
@@ -248,7 +290,7 @@ class OfflineOCRInvoice:
                 if isinstance(result[0], dict) and 'rec_texts' in result[0]:
                     # 新版本格式：结果包含rec_texts字段
                     texts = result[0]['rec_texts']
-                    print(f"使用新格式提取文本，共{len(texts)}条")
+                    print("使用新格式提取文本，共{}条".format(len(texts)))
                 elif result[0]:
                     # 旧版本格式
                     ocr_result = result[0]
@@ -263,7 +305,7 @@ class OfflineOCRInvoice:
                             
                             if text:
                                 texts.append(text)
-                    print(f"使用旧格式提取文本，共{len(texts)}条")
+                    print("使用旧格式提取文本，共{}条".format(len(texts)))
         except (IndexError, TypeError) as e:
             print(f"文本提取出错: {e}")
         return texts
@@ -326,13 +368,20 @@ class OfflineOCRInvoice:
         except Exception as e:
             print(f"开票公司名称提取失败: {e}")
         
+        # 最终清理开票公司名称中的"名称："前缀
+        if company_name and company_name.startswith("名称："):
+            company_name = company_name[3:].strip()  # 去掉"名称："前缀
+            print(f"清理前缀后的开票公司名称: {company_name}")
+        
         try:
             # 提取发票号码
             number_patterns = [
+                r'发票号码[：:]】?【?([0-9]{6,20})',  # 处理【发票号码：】【数字】的格式
                 r'发票号码[：:]\s*([0-9]{6,20})',
                 r'发票号[：:]?\s*([0-9]{6,20})',
                 r'号码[：:]\s*([0-9]{6,20})',
                 r'No[：:.]?\s*([0-9]{6,20})',
+                r'【([0-9]{15,20})】',  # 直接匹配长数字（发票号码通常很长）
             ]
             
             for pattern in number_patterns:
@@ -384,17 +433,22 @@ class OfflineOCRInvoice:
             print(f"发票日期提取失败: {e}")
         
         try:
-            # 提取发票金额 - 优化金额提取逻辑
-            amount_patterns = [
+            # 提取发票金额 - 优先提取价税合计/实付金额
+            invoice_amount = ""
+            
+            # 第一优先级：价税合计相关
+            priority_patterns = [
                 r'价税合计[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',  # 价税合计：123.45
                 r'价税合计[：:][^￥¥\d]*([0-9]+\.?[0-9]*)\s*[￥¥]?',  # 价税合计：￥123.45
-                r'合计[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',     # 合计：123.45
-                r'小写[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',     # 小写：123.45
-                r'金额[（\(]不含税[）\)][：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)', # 金额（不含税）：123.45
-                r'[￥¥]\s*([0-9]+\.?[0-9]*)',  # ￥123.45
+                r'实付金额[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',  # 实付金额：123.45
+                r'实付[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',     # 实付：123.45
+                r'应付金额[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)', # 应付金额：123.45
+                r'总计[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',     # 总计：123.45
+                r'总金额[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',   # 总金额：123.45
             ]
             
-            for pattern in amount_patterns:
+            # 尝试第一优先级模式
+            for pattern in priority_patterns:
                 amount_matches = re.findall(pattern, text)
                 if amount_matches:
                     valid_amounts = []
@@ -408,9 +462,53 @@ class OfflineOCRInvoice:
                             continue
                     
                     if valid_amounts:
-                        invoice_amount = max(valid_amounts)  # 通常取最大的金额作为发票总额
-                        print(f"提取到发票金额: {invoice_amount}")
+                        invoice_amount = max(valid_amounts)  # 取最大的金额作为发票总额
+                        print(f"通过优先模式提取到发票金额: {invoice_amount} (模式: {pattern})")
                         break
+            
+            # 第二优先级：如果没有找到价税合计，尝试其他模式
+            if not invoice_amount:
+                secondary_patterns = [
+                    r'合计[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',     # 合计：123.45
+                    r'小写[：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)',     # 小写：123.45
+                    r'金额[（\(]含税[）\)][：:][^￥¥\d]*[￥¥]?\s*([0-9]+\.?[0-9]*)', # 金额（含税）：123.45
+                ]
+                
+                for pattern in secondary_patterns:
+                    amount_matches = re.findall(pattern, text)
+                    if amount_matches:
+                        valid_amounts = []
+                        for amount_str in amount_matches:
+                            try:
+                                amount = float(amount_str)
+                                if amount >= 0.01 and amount <= 999999999:
+                                    valid_amounts.append(amount)
+                            except ValueError:
+                                continue
+                        
+                        if valid_amounts:
+                            invoice_amount = max(valid_amounts)
+                            print(f"通过次要模式提取到发票金额: {invoice_amount} (模式: {pattern})")
+                            break
+            
+            # 第三优先级：通用金额模式（最后备用）
+            if not invoice_amount:
+                fallback_patterns = [
+                    r'[￥¥]\s*([0-9]+\.?[0-9]*)',  # ￥123.45
+                ]
+                
+                for pattern in fallback_patterns:
+                    amount_matches = re.findall(pattern, text)
+                    if amount_matches:
+                        # 对于通用模式，取最后一个（通常是价税合计）
+                        try:
+                            amount = float(amount_matches[-1])  # 取最后一个金额
+                            if amount >= 0.01 and amount <= 999999999:
+                                invoice_amount = amount
+                                print(f"通过备用模式提取到发票金额: {invoice_amount} (最后一个金额)")
+                                break
+                        except ValueError:
+                            continue
         except Exception as e:
             print(f"发票金额提取失败: {e}")
         

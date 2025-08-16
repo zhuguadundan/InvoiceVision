@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  invoice-vision-web:
+    image: zhugua/invoicevision:0.10
+    container_name: invoice-vision-web
+    ports:
+      - "8066:8080"
+    volumes:
+      - ./input:/app/input
+      - ./output:/app/output
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=production
+      - MAX_CONTENT_LENGTH=500MB
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+
+    
+  
+  

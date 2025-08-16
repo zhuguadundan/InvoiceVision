@@ -8,7 +8,6 @@ import os
 import sys
 import json
 import shutil
-import requests
 from pathlib import Path
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QTextEdit, QMessageBox, QFileDialog
 from PyQt5.QtCore import QThread, pyqtSignal, Qt
@@ -114,42 +113,8 @@ class ModelManager:
                 raise FileNotFoundError(f"源目录中缺少模型: {model_name}")
 
 
-class ModelDownloadThread(QThread):
-    """模型下载线程"""
-    
-    progress_updated = pyqtSignal(int, str)
-    download_finished = pyqtSignal(bool, str)
-    
-    def __init__(self, download_urls, target_dir):
-        super().__init__()
-        self.download_urls = download_urls
-        self.target_dir = Path(target_dir)
-        
-    def run(self):
-        """执行下载"""
-        try:
-            self.target_dir.mkdir(parents=True, exist_ok=True)
-            
-            total_files = len(self.download_urls)
-            
-            for i, (filename, url) in enumerate(self.download_urls.items()):
-                self.progress_updated.emit(
-                    int((i / total_files) * 100), 
-                    f"正在下载 {filename}..."
-                )
-                
-                # 这里可以添加实际的下载逻辑
-                # 由于模型文件较大，建议提供本地复制功能
-                
-            self.progress_updated.emit(100, "下载完成")
-            self.download_finished.emit(True, "模型下载完成")
-            
-        except Exception as e:
-            self.download_finished.emit(False, f"下载失败: {str(e)}")
-
-
 class ModelSetupDialog(QDialog):
-    """模型设置对话框"""
+    """模型设置对话框 - 仅支持本地复制"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -159,7 +124,7 @@ class ModelSetupDialog(QDialog):
     def init_ui(self):
         """初始化UI"""
         self.setWindowTitle("InvoiceVision - 模型配置")
-        self.setFixedSize(500, 400)
+        self.setFixedSize(500, 350)
         self.setModal(True)
         
         layout = QVBoxLayout()
@@ -173,7 +138,7 @@ class ModelSetupDialog(QDialog):
         # 说明文字
         desc_label = QLabel(
             "InvoiceVision需要AI模型文件才能正常工作。\n"
-            "您可以选择从现有位置复制模型，或者下载新的模型文件。"
+            "请从现有位置复制模型文件到本地。"
         )
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
@@ -191,17 +156,7 @@ class ModelSetupDialog(QDialog):
         self.copy_button.clicked.connect(self.copy_models)
         button_layout.addWidget(self.copy_button)
         
-        self.download_button = QPushButton("在线下载模型")
-        self.download_button.clicked.connect(self.download_models)
-        self.download_button.setEnabled(False)  # 暂时禁用在线下载
-        button_layout.addWidget(self.download_button)
-        
         layout.addLayout(button_layout)
-        
-        # 进度条
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
         
         # 关闭按钮
         self.close_button = QPushButton("稍后配置")
@@ -254,15 +209,6 @@ class ModelSetupDialog(QDialog):
             
         except Exception as e:
             QMessageBox.critical(self, "错误", f"复制模型文件失败:\n{str(e)}")
-    
-    def download_models(self):
-        """在线下载模型"""
-        # 这里可以实现在线下载功能
-        QMessageBox.information(
-            self, 
-            "功能开发中", 
-            "在线下载功能正在开发中。\n请使用'从本地复制模型'功能。"
-        )
 
 
 def check_and_setup_models():

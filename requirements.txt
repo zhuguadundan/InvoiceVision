@@ -1,4 +1,4 @@
-# 发票OCR识别器依赖包列表
+# 发票OCR识别器依赖包列表 - 纯离线版本
 # 适用于 PaddleOCR 3.1+ 版本
 
 # 核心OCR依赖
@@ -21,5 +21,4 @@ pyqt5>=5.15.0
 
 # 其他工具
 pyyaml>=6.0
-requests>=2.25.0
 typing-extensions>=4.12.0

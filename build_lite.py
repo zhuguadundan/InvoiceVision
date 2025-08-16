@@ -42,9 +42,7 @@ def main():
         'resource_utils.py',
         'ModelManager.py',
         'offline_config.json',
-        'InvoiceVision.spec',
-        'version.txt',
-        'version_info.txt'
+        'InvoiceVision.spec'
     ]
     
     print("\n检查必要文件...")
@@ -86,8 +84,17 @@ def main():
                 else:
                     shutil.rmtree(dir_name)
                 print(f"[CLEANED] {dir_name}")
+            except PermissionError as e:
+                if dir_name == 'dist':
+                    print(f"[ERROR] 清理 {dir_name} 失败: {e}")
+                    print("[INFO] 可能有InvoiceVision.exe正在运行")
+                    print("[INFO] 请手动关闭所有InvoiceVision进程后重试")
+                    input("按回车键退出...")
+                    return
+                else:
+                    print(f"[WARNING] 清理 {dir_name} 失败: {e}")
             except Exception as e:
-                print(f"[ERROR] 清理 {dir_name} 失败: {e}")
+                print(f"[WARNING] 清理 {dir_name} 失败: {e}")
     
     # 开始打包
     print("\n开始打包（模型分离版）...")
@@ -100,13 +107,19 @@ def main():
     start_time = time.time()
     
     try:
+        # 设置环境变量，减少编译警告
+        env = os.environ.copy()
+        env['PADDLE_SKIP_SIGNALS_CHECK'] = '1'  # 跳过信号检查
+        env['PADDLE_SILENT_MODE'] = '1'         # 静默模式
+        env['PADDLE_DISABLE_WARNINGS'] = '1'    # 禁用警告
+        
         cmd = [sys.executable, '-m', 'PyInstaller', '--clean', '--noconfirm', 'InvoiceVision.spec']
         print(f"\n执行命令: {' '.join(cmd)}")
         print("-" * 50)
         
         # 实时显示输出
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                text=True, universal_newlines=True)
+                                text=True, universal_newlines=True, env=env)
         
         for line in process.stdout:
             print(line, end='')
