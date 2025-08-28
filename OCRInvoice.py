@@ -15,6 +15,8 @@ import json
 import numpy as np
 import cv2
 from pathlib import Path
+import threading
+import time
 
 def safe_print(text):
     """安全的打印函数，处理编码问题"""
@@ -24,11 +26,19 @@ def safe_print(text):
         print(text.encode('gbk', 'ignore').decode('gbk'))
 
 class OfflineOCRInvoice:
+    # 类变量：所有实例共享的OCR引擎
+    _shared_ocr_engine = None
+    _initialization_lock = threading.Lock()
+    _initialization_status = "pending"  # pending, loading, ready, failed
+    
     def __init__(self):
         """初始化离线OCR发票识别器"""
         self.precision_mode = '快速'
-        self.ocr_engine = None
         self.offline_config = self._load_offline_config()
+        
+        # 确保全局OCR引擎已初始化
+        if self.__class__._initialization_status == "pending":
+            self.global_initialize_ocr()
         
     def _load_offline_config(self):
         """加载离线配置 - 支持外部模型架构"""
@@ -141,89 +151,112 @@ class OfflineOCRInvoice:
             
         return True, "所有模型文件已就绪"
     
-    def initialize_ocr(self):
-        """初始化OCR引擎 - 使用外部模型"""
-        try:
-            print(f"开始初始化OCR引擎，当前精度模式: {self.precision_mode}")
+    @classmethod
+    def global_initialize_ocr(cls, precision_mode='快速'):
+        """全局OCR引擎初始化 - 在主线程中调用，避免重复初始化"""
+        with cls._initialization_lock:
+            if cls._initialization_status == "ready":
+                print("OCR引擎已经初始化完成")
+                return True
             
-            # 首先检查模型是否可用
-            models_available, message = self.check_models_available()
-            if not models_available:
-                print(f"模型检查失败: {message}")
-                return False
+            if cls._initialization_status == "loading":
+                # 等待初始化完成
+                print("OCR引擎正在初始化中，等待完成...")
+                timeout = 30  # 30秒超时
+                start_time = time.time()
+                while cls._initialization_status == "loading" and time.time() - start_time < timeout:
+                    time.sleep(0.1)
+                return cls._initialization_status == "ready"
             
-            if self.offline_config and self.offline_config.get("offline_mode", False):
-                # 离线模式
-                models = self.offline_config.get("models", {})
+            cls._initialization_status = "loading"
+            print(f"开始全局初始化OCR引擎，精度模式: {precision_mode}")
+            
+            try:
+                # 在主线程中设置环境变量 - 必须在导入前设置
+                os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+                os.environ['PADDLE_DISABLE_SHARED_MEM'] = '1'
+                os.environ['CUDA_VISIBLE_DEVICES'] = ''
+                print("环境变量设置完成")
                 
-                if self.precision_mode == '快速':
-                    # 快速模式：只使用检测和识别模型
-                    params = {
-                        "use_textline_orientation": False,
-                        "lang": "ch"
-                    }
-                    
-                    if "det_model_dir" in models and os.path.exists(models["det_model_dir"]):
-                        params["det_model_dir"] = models["det_model_dir"]
-                        print(f"使用检测模型: {models['det_model_dir']}")
-                    
-                    if "rec_model_dir" in models and os.path.exists(models["rec_model_dir"]):
-                        params["rec_model_dir"] = models["rec_model_dir"]
-                        print(f"使用识别模型: {models['rec_model_dir']}")
+                # 创建临时实例获取配置
+                temp_instance = cls()
+                models_available, message = temp_instance.check_models_available()
+                if not models_available:
+                    cls._initialization_status = "failed"
+                    print(f"模型检查失败: {message}")
+                    return False
                 
-                else:
-                    # 高精度模式：使用所有可用模型
-                    params = {
-                        "use_textline_orientation": True,
-                        "lang": "ch"
-                    }
-                    
-                    if "det_model_dir" in models and os.path.exists(models["det_model_dir"]):
-                        params["det_model_dir"] = models["det_model_dir"]
-                    
-                    if "rec_model_dir" in models and os.path.exists(models["rec_model_dir"]):
-                        params["rec_model_dir"] = models["rec_model_dir"]
-                        
-                    if "cls_model_dir" in models and os.path.exists(models["cls_model_dir"]):
-                        params["cls_model_dir"] = models["cls_model_dir"]
+                models = temp_instance.offline_config.get("models", {})
                 
-                print(f"初始化离线OCR引擎 - 模式: {self.precision_mode}")
-                
-                # 延迟导入PaddleOCR，避免启动时模块加载问题
+                # EasyOCR引擎初始化 - PyInstaller友好
                 try:
-                    # 设置环境变量，解决exe环境下可能的库冲突
-                    os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
-                    os.environ['PADDLE_DISABLE_SHARED_MEM'] = '1'
-                    os.environ['CUDA_VISIBLE_DEVICES'] = ''
+                    import easyocr
+                    print("EasyOCR模块导入成功")
                     
-                    from paddleocr import PaddleOCR
-                    print("PaddleOCR导入成功，正在初始化...")
-                    
-                    self.ocr_engine = PaddleOCR(**params)
-                    print("SUCCESS: 离线OCR引擎初始化成功")
+                    # 创建EasyOCR实例，支持中英文
+                    cls._shared_ocr_engine = easyocr.Reader(['ch_sim', 'en'], 
+                                                          gpu=False,  # 使用CPU模式
+                                                          verbose=False)
+                    cls._initialization_status = "ready"
+                    print("[SUCCESS] 全局EasyOCR引擎初始化成功")
                     return True
-                except ImportError as e:
-                    print(f"ERROR: PaddleOCR导入失败: {e}")
-                    return False
-                except Exception as e:
-                    print(f"ERROR: PaddleOCR初始化失败: {e}")
-                    print(f"错误类型: {type(e).__name__}")
-                    return False
-            else:
-                print("ERROR: 未找到有效的离线配置")
+                    
+                except Exception as easyocr_error:
+                    # EasyOCR失败，尝试导入PaddleOCR作为后备
+                    print(f"EasyOCR初始化失败: {easyocr_error}")
+                    print("尝试使用PaddleOCR作为后备方案...")
+                    
+                    try:
+                        from paddleocr import PaddleOCR
+                        print("PaddleOCR模块导入成功")
+                        
+                        # 使用官方OCR pipeline
+                        cls._shared_ocr_engine = PaddleOCR(use_angle_cls=precision_mode == '高精', 
+                                                         lang='ch')
+                        cls._initialization_status = "ready"  
+                        print("[SUCCESS] 全局PaddleOCR引擎初始化成功(后备模式)")
+                        return True
+                        
+                    except Exception as paddle_error:
+                        cls._initialization_status = "failed"
+                        print(f"[ERROR] 所有OCR引擎初始化失败")
+                        print(f"EasyOCR错误: {easyocr_error}")
+                        print(f"PaddleOCR错误: {paddle_error}")
+                        return False
+                        
+            except ImportError as e:
+                cls._initialization_status = "failed"
+                print(f"[ERROR] OCR模块导入失败: {e}")
                 return False
-                
-        except Exception as e:
-            print(f"ERROR: OCR引擎初始化失败: {e}")
-            return False
+            except Exception as e:
+                cls._initialization_status = "failed"
+                print(f"[ERROR] 全局OCR引擎初始化失败: {e}")
+                print(f"错误类型: {type(e).__name__}")
+                import traceback
+                print(f"详细错误信息:\n{traceback.format_exc()}")
+                return False
+    
+    @property
+    def ocr_engine(self):
+        """获取共享的OCR引擎实例"""
+        return self.__class__._shared_ocr_engine
+    
+    @classmethod
+    def get_initialization_status(cls):
+        """获取初始化状态"""
+        return cls._initialization_status
+    
+    def initialize_ocr(self):
+        """旧版初始化方法 - 现在委托给全局初始化"""
+        print("调用旧版initialize_ocr，委托给全局初始化...")
+        return self.__class__._shared_ocr_engine is not None
     
     def set_precision_mode(self, mode):
-        """设置精度模式"""
+        """设置精度模式 - 需要重新全局初始化"""
         if mode in ['快速', '高精']:
             self.precision_mode = mode
-            # 需要重新初始化引擎
-            self.ocr_engine = None
             print(f"精度模式设置为: {mode}")
+            print("注意: 精度模式更改需要重新调用 global_initialize_ocr() 才能生效")
             return True
         else:
             print("无效的精度模式，支持的模式: '快速', '高精'")
@@ -231,10 +264,10 @@ class OfflineOCRInvoice:
     
     def run_ocr(self, image_path):
         """执行OCR识别"""
-        # 确保OCR引擎已初始化
+        # 检查全局OCR引擎是否可用
         if self.ocr_engine is None:
-            if not self.initialize_ocr():
-                return [image_path, '', '', '', '']
+            print("ERROR: 全局OCR引擎未初始化，请先调用 OfflineOCRInvoice.global_initialize_ocr()")
+            return [image_path, '', '', '', '']
         
         try:
             print(f"开始处理图片: {os.path.basename(image_path)}")
@@ -254,9 +287,15 @@ class OfflineOCRInvoice:
                 pil_image = Image.open(image_path)
                 img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
             
-            # 执行OCR识别
-            result = self.ocr_engine.ocr(img)
-            texts = self._extract_texts_from_result(result)
+            # 执行OCR识别 - 兼容EasyOCR和PaddleOCR
+            if hasattr(self.ocr_engine, 'readtext'):
+                # EasyOCR API
+                result = self.ocr_engine.readtext(img)
+                texts = self._extract_texts_from_easyocr_result(result)
+            else:
+                # PaddleOCR API  
+                result = self.ocr_engine.ocr(img)
+                texts = self._extract_texts_from_result(result)
             
             if not texts:
                 print("OCR未识别到任何文本")
@@ -268,8 +307,17 @@ class OfflineOCRInvoice:
             if not self._contains_invoice_keywords(combined_text):
                 print("未检测到发票关键词，尝试旋转图片...")
                 img_rotated = cv2.rotate(img, cv2.ROTATE_180)
-                result = self.ocr_engine.ocr(img_rotated)
-                texts = self._extract_texts_from_result(result)
+                
+                # 旋转后再次OCR识别 - 兼容两种API
+                if hasattr(self.ocr_engine, 'readtext'):
+                    # EasyOCR API
+                    result = self.ocr_engine.readtext(img_rotated)
+                    texts = self._extract_texts_from_easyocr_result(result)
+                else:
+                    # PaddleOCR API
+                    result = self.ocr_engine.ocr(img_rotated)
+                    texts = self._extract_texts_from_result(result)
+                    
                 combined_text = '【' + '】【'.join(texts) + '】'
             
             # 提取发票信息
@@ -309,6 +357,24 @@ class OfflineOCRInvoice:
         except (IndexError, TypeError) as e:
             print(f"文本提取出错: {e}")
         return texts
+    
+    def _extract_texts_from_easyocr_result(self, result):
+        """从EasyOCR结果中提取文本"""
+        texts = []
+        try:
+            # EasyOCR返回格式：[(bbox, text, confidence), ...]
+            for detection in result:
+                if len(detection) >= 2:
+                    text = detection[1].strip()  # detection[1]是识别的文本
+                    if text:
+                        texts.append(text)
+            
+            print(f"EasyOCR识别到{len(texts)}条文本")
+            return texts
+            
+        except Exception as e:
+            print(f"EasyOCR文本提取出错: {e}")
+            return []
     
     def _contains_invoice_keywords(self, text):
         """检查文本是否包含发票关键词"""

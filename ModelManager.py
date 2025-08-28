@@ -111,6 +111,26 @@ class ModelManager:
                 shutil.copytree(source_model, target_model)
             else:
                 raise FileNotFoundError(f"源目录中缺少模型: {model_name}")
+    
+    def check_models_status(self):
+        """检查模型状态 - InvoiceVision兼容接口"""
+        models_dir = self.get_models_directory()
+        
+        if not models_dir.exists():
+            return "missing_all", "模型目录不存在"
+            
+        missing_models = []
+        for model_name in self.required_models:
+            model_path = models_dir / model_name
+            if not model_path.exists() or not any(model_path.iterdir()):
+                missing_models.append(model_name)
+        
+        if len(missing_models) == len(self.required_models):
+            return "missing_all", "所有模型都缺失"
+        elif missing_models:
+            return "partial", f"部分模型缺失: {', '.join(missing_models)}"
+        else:
+            return "complete", "所有模型完整"
 
 
 class ModelSetupDialog(QDialog):

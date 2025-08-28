@@ -33,17 +33,20 @@ def ocr_pdf_offline(pdf_path, precision_mode, output_dir=None):
         pdf_converter.pyMuPDF_fitz(pdf_path)
         print(f"PDF转换完成，图片保存路径: {pdf_converter.imagePath}")
         
-        # 初始化离线OCR识别器
-        print("初始化离线OCR引擎...")
+        # 初始化离线OCR识别器 - 使用全局预初始化的引擎
+        print("创建OCR引擎实例...")
         ocr_engine = OfflineOCRInvoice()
+        
+        # 检查全局OCR引擎状态
+        if ocr_engine.ocr_engine is None:
+            print("ERROR: 全局OCR引擎未初始化，请确保应用启动时已完成预初始化")
+            return
+        
+        print(f"✅ 使用全局OCR引擎，模式: {precision_mode}")
         
         # 显示模型信息
         model_info = ocr_engine.get_model_info()
         print(f"OCR模型信息: {model_info}")
-        
-        if not ocr_engine.set_precision_mode(precision_mode):
-            print("OCR引擎初始化失败")
-            return
         
         # 处理所有转换后的图片
         item_no = 1
@@ -131,17 +134,20 @@ def ocr_images_offline(image_folder_path, precision_mode, output_dir=None):
         # 创建结果DataFrame
         invoice_info = DataFrame(columns=['文件地址', '开票公司', '发票号码', '日期', '金额（价税合计）', '项目名称'])
         
-        # 初始化离线OCR识别器
-        print("初始化离线OCR引擎...")
+        # 初始化离线OCR识别器 - 使用全局预初始化的引擎
+        print("创建OCR引擎实例...")
         ocr_engine = OfflineOCRInvoice()
+        
+        # 检查全局OCR引擎状态
+        if ocr_engine.ocr_engine is None:
+            print("ERROR: 全局OCR引擎未初始化，请确保应用启动时已完成预初始化")
+            return
+        
+        print(f"✅ 使用全局OCR引擎，模式: {precision_mode}")
         
         # 显示模型信息
         model_info = ocr_engine.get_model_info()
         print(f"OCR模型信息: {model_info}")
-        
-        if not ocr_engine.set_precision_mode(precision_mode):
-            print("OCR引擎初始化失败")
-            return
         
         # 处理文件夹中的所有图片
         item_no = 1

@@ -114,7 +114,11 @@
       "Bash(powershell -Command \"docker run --rm zhugua/invoicevision:0.10 ls -la /app/\")",
       "Bash(powershell -Command \"docker run --rm -v ''$PWD:/host'' zhugua/invoicevision:0.10 cp -r /app/static /host/\")",
       "Bash(powershell -Command \"docker run --rm -v ''$PWD:/host'' zhugua/invoicevision:0.10 cp -r /app/templates /host/\")",
-      "Bash(powershell -Command \"docker run --rm zhugua/invoicevision:0.10 find /app -name ''*GUIDE*'' -o -name ''*DOCKER*''\")"
+      "Bash(powershell -Command \"docker run --rm zhugua/invoicevision:0.10 find /app -name ''*GUIDE*'' -o -name ''*DOCKER*''\")",
+      "WebSearch",
+      "Bash(powershell:*)",
+      "Bash(D:\\InvoiceVision\\python-embed\\python.exe:*)",
+      "Bash(cmd /c:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

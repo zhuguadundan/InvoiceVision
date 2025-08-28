@@ -103,6 +103,10 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         self.model_manager = ModelManager()
         self.check_models_on_startup()
         
+        # 🔥 关键修改：预初始化OCR引擎（在主线程中）
+        self.log_debug("预初始化OCR引擎...", "INFO")
+        self.global_ocr_initialized = self.pre_initialize_ocr()
+        
         self.log_debug("设置用户界面...", "DEBUG")
         self.setup_ui()
         self.pdf_thread = None
@@ -171,6 +175,97 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(None, "下载错误", f"下载过程出错: {e}")
         
+    def pre_initialize_ocr(self):
+        """预初始化OCR引擎 - 在主线程中完成，避免后续阻塞"""
+        try:
+            # 动态导入OCRInvoice模块
+            import OCRInvoice
+            
+            # 获取当前精度模式
+            precision_mode = '快速'  # 默认使用快速模式启动
+            
+            self.log_debug(f"开始预初始化OCR引擎，模式: {precision_mode}", "INFO")
+            
+            # 调用全局初始化方法
+            success = OCRInvoice.OfflineOCRInvoice.global_initialize_ocr(precision_mode)
+            
+            if success:
+                self.log_debug("[SUCCESS] OCR引擎预初始化成功", "INFO")
+                return True
+            else:
+                self.log_debug("[ERROR] OCR引擎预初始化失败", "ERROR")
+                # 显示警告但不阻止启动
+                QMessageBox.warning(
+                    None,
+                    "OCR初始化警告", 
+                    "OCR引擎预初始化失败，程序可能无法正常识别发票。\n\n"
+                    "可能的原因：\n"
+                    "1. 模型文件缺失或损坏\n"
+                    "2. 依赖库不完整\n"
+                    "3. 系统资源不足\n\n"
+                    "您可以通过调试工具查看详细错误信息。"
+                )
+                return False
+                
+        except ImportError as e:
+            self.log_debug(f"[ERROR] OCRInvoice模块导入失败: {e}", "ERROR")
+            QMessageBox.critical(
+                None,
+                "模块导入错误",
+                f"无法导入OCRInvoice模块:\n{str(e)}\n\n"
+                "这可能是打包问题，请检查所有必要文件是否包含在内。"
+            )
+            return False
+        except Exception as e:
+            self.log_debug(f"[ERROR] OCR预初始化异常: {e}", "ERROR")
+            import traceback
+            self.log_debug(f"详细错误:\n{traceback.format_exc()}", "ERROR")
+            return False
+    
+    def ensure_ocr_ready(self, precision_mode):
+        """确保OCR引擎就绪，如有必要重新初始化"""
+        try:
+            import OCRInvoice
+            
+            # 检查当前状态
+            status = OCRInvoice.OfflineOCRInvoice.get_initialization_status()
+            self.log_debug(f"当前OCR状态: {status}", "DEBUG")
+            
+            if status == "ready":
+                self.log_debug("OCR引擎已就绪", "DEBUG")
+                return True
+            elif status == "failed":
+                self.log_debug("OCR引擎之前初始化失败，尝试重新初始化", "INFO")
+            elif status == "pending":
+                self.log_debug("OCR引擎未初始化，现在初始化", "INFO")
+            
+            # 重新初始化
+            self.log_debug(f"重新初始化OCR引擎，模式: {precision_mode}", "INFO")
+            success = OCRInvoice.OfflineOCRInvoice.global_initialize_ocr(precision_mode)
+            
+            if success:
+                self.log_debug("[SUCCESS] OCR引擎重新初始化成功", "INFO")
+                return True
+            else:
+                self.log_debug("[ERROR] OCR引擎重新初始化失败", "ERROR")
+                QMessageBox.critical(
+                    self,
+                    "OCR引擎错误", 
+                    f"OCR引擎初始化失败，无法处理文件。\n\n"
+                    f"当前模式: {precision_mode}\n"
+                    "请检查:\n"
+                    "1. 模型文件是否完整\n"
+                    "2. 系统内存是否充足\n"
+                    "3. 依赖库是否正确安装\n\n"
+                    "您可以通过【调试工具】查看详细错误信息。"
+                )
+                return False
+                
+        except Exception as e:
+            self.log_debug(f"[ERROR] ensure_ocr_ready异常: {e}", "ERROR")
+            QMessageBox.critical(self, "系统错误", f"OCR状态检查失败:\n{str(e)}")
+            return False
+    
     def setup_ui(self):
         """设置现代化UI界面"""
         self.setObjectName("OfflineInvoiceOCRMainWindow")
@@ -402,7 +497,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         status_layout = QHBoxLayout(status_frame)
         
         # 状态标签
-        self.status_label = QtWidgets.QLabel("✅ 就绪 - 离线运行" if self.offline_status else "⚠️ 就绪 - 需要网络")
+        self.status_label = QtWidgets.QLabel("[SUCCESS] 就绪 - 离线运行" if self.offline_status else "⚠️ 就绪 - 需要网络")
         
         # 进度条
         self.progress_bar = QProgressBar()
@@ -587,7 +682,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                     model_info += f"• {model_dir}: {size_mb:.1f} MB\n"
                 
                 model_info += f"\n总大小: {total_size:.1f} MB"
-                model_info += "\n状态: ✅ 可完全离线运行"
+                model_info += "\n状态: [SUCCESS] 可完全离线运行"
                 
             else:
                 model_info = "未找到本地模型文件\n\n请运行 setup_offline_simple.py 设置离线模型"
@@ -750,14 +845,14 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             self.log_debug("检查模型文件...", "DEBUG")
             models_available, model_message = ocr.check_models_available()
             if models_available:
-                self.log_debug("✅ 模型文件检查通过", "INFO")
+                self.log_debug("[SUCCESS] 模型文件检查通过", "INFO")
             else:
-                self.log_debug(f"❌ 模型文件检查失败: {model_message}", "ERROR")
+                self.log_debug(f"[ERROR] 模型文件检查失败: {model_message}", "ERROR")
                 return
             
             self.log_debug("初始化OCR引擎...", "DEBUG")
             if ocr.initialize_ocr():
-                self.log_debug("✅ OCR引擎初始化成功", "INFO")
+                self.log_debug("[SUCCESS] OCR引擎初始化成功", "INFO")
                 
                 # 创建测试图片
                 self.log_debug("创建测试图片...", "DEBUG")
@@ -770,17 +865,17 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 self.log_debug("执行OCR识别...", "DEBUG")
                 try:
                     result = ocr.ocr_engine.ocr(test_img_array)
-                    self.log_debug(f"✅ OCR识别成功: {result}", "INFO")
+                    self.log_debug(f"[SUCCESS] OCR识别成功: {result}", "INFO")
                 except Exception as ocr_error:
-                    self.log_debug(f"❌ OCR识别失败: {str(ocr_error)}", "ERROR")
+                    self.log_debug(f"[ERROR] OCR识别失败: {str(ocr_error)}", "ERROR")
                     import traceback
                     self.log_debug(f"OCR错误详情: {traceback.format_exc()}", "ERROR")
                     
             else:
-                self.log_debug("❌ OCR引擎初始化失败", "ERROR")
+                self.log_debug("[ERROR] OCR引擎初始化失败", "ERROR")
                 
         except Exception as e:
-            self.log_debug(f"❌ OCR功能测试失败: {str(e)}", "ERROR")
+            self.log_debug(f"[ERROR] OCR功能测试失败: {str(e)}", "ERROR")
             import traceback
             self.log_debug(f"错误详情:\n{traceback.format_exc()}", "ERROR")
     
@@ -826,9 +921,9 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             for name, module in critical_modules:
                 try:
                     __import__(module)
-                    self.log_debug(f"  ✅ {name}", "INFO")
+                    self.log_debug(f"  [SUCCESS] {name}", "INFO")
                 except ImportError as e:
-                    self.log_debug(f"  ❌ {name}: {str(e)}", "ERROR")
+                    self.log_debug(f"  [ERROR] {name}: {str(e)}", "ERROR")
                     critical_errors.append((name, str(e)))
             
             self.log_debug("检查PaddleOCR相关模块:", "INFO")
@@ -841,9 +936,9 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                     if module == 'paddleocr':
                         try:
                             __import__(module)
-                            self.log_debug(f"  ✅ {name}", "INFO")
+                            self.log_debug(f"  [SUCCESS] {name}", "INFO")
                         except ImportError as e:
-                            self.log_debug(f"  ❌ {name}: {str(e)}", "ERROR")
+                            self.log_debug(f"  [ERROR] {name}: {str(e)}", "ERROR")
                             paddle_errors.append((name, str(e)))
                     else:
                         # 对于子模块，使用更安全的检查方式
@@ -855,16 +950,16 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                             # 然后尝试检查子模块
                             try:
                                 __import__(module)
-                                self.log_debug(f"  ✅ {name}", "INFO")
+                                self.log_debug(f"  [SUCCESS] {name}", "INFO")
                             except ImportError as e:
-                                self.log_debug(f"  ❌ {name}: {str(e)}", "ERROR")
+                                self.log_debug(f"  [ERROR] {name}: {str(e)}", "ERROR")
                                 paddle_errors.append((name, str(e)))
                         except ImportError as e:
-                            self.log_debug(f"  ❌ {name}: {parent_module} 主模块缺失", "ERROR")
+                            self.log_debug(f"  [ERROR] {name}: {parent_module} 主模块缺失", "ERROR")
                             paddle_errors.append((name, f"父模块 {parent_module} 缺失"))
                 except Exception as e:
                     # 捕获其他异常，防止程序中断
-                    self.log_debug(f"  ❌ {name}: {str(e)}", "ERROR")
+                    self.log_debug(f"  [ERROR] {name}: {str(e)}", "ERROR")
                     paddle_errors.append((name, str(e)))
             
             # 额外检查常见的PaddleX子模块
@@ -877,12 +972,12 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                         full_module = f'paddlex.{name}'
                         try:
                             __import__(full_module)
-                            self.log_debug(f"  ✅ {full_module}", "INFO")
+                            self.log_debug(f"  [SUCCESS] {full_module}", "INFO")
                         except ImportError as e:
-                            self.log_debug(f"  ❌ {full_module}: {str(e)}", "ERROR")
+                            self.log_debug(f"  [ERROR] {full_module}: {str(e)}", "ERROR")
                             paddle_errors.append((full_module, str(e)))
                 except ImportError:
-                    self.log_debug("  ❌ paddlex 主模块不可用", "ERROR")
+                    self.log_debug("  [ERROR] paddlex 主模块不可用", "ERROR")
                     paddle_errors.append(('paddlex', 'paddlex 主模块不可用'))
             except Exception as e:
                 self.log_debug(f"  ⚠️ 无法自动检测PaddleX子模块: {str(e)}", "WARNING")
@@ -929,31 +1024,31 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             
             for model_path in model_paths:
                 if os.path.exists(model_path):
-                    self.log_debug(f"  ✅ {model_path}", "INFO")
+                    self.log_debug(f"  [SUCCESS] {model_path}", "INFO")
                     # 检查关键文件
                     required_files = ["inference.pdiparams", "inference.yml"]
                     for file in required_files:
                         file_path = os.path.join(model_path, file)
                         if os.path.exists(file_path):
-                            self.log_debug(f"    ✅ {file}", "INFO")
+                            self.log_debug(f"    [SUCCESS] {file}", "INFO")
                         else:
-                            self.log_debug(f"    ❌ {file}", "ERROR")
+                            self.log_debug(f"    [ERROR] {file}", "ERROR")
                 else:
-                    self.log_debug(f"  ❌ {model_path}", "ERROR")
+                    self.log_debug(f"  [ERROR] {model_path}", "ERROR")
             
             # 检查配置文件
             self.log_debug("检查配置文件:", "INFO")
             if os.path.exists("offline_config.json"):
-                self.log_debug("  ✅ offline_config.json", "INFO")
+                self.log_debug("  [SUCCESS] offline_config.json", "INFO")
                 try:
                     import json
                     with open("offline_config.json", 'r', encoding='utf-8') as f:
                         config = json.load(f)
                         self.log_debug(f"  配置内容: {config}", "DEBUG")
                 except Exception as e:
-                    self.log_debug(f"  ❌ 配置文件读取失败: {str(e)}", "ERROR")
+                    self.log_debug(f"  [ERROR] 配置文件读取失败: {str(e)}", "ERROR")
             else:
-                self.log_debug("  ❌ offline_config.json 不存在", "ERROR")
+                self.log_debug("  [ERROR] offline_config.json 不存在", "ERROR")
             
             # 检查系统DLL
             self.log_debug("检查系统DLL:", "INFO")
@@ -961,11 +1056,11 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             try:
                 result = subprocess.run(['where', 'vcruntime140.dll'], capture_output=True, text=True, timeout=5)
                 if result.returncode == 0:
-                    self.log_debug(f"  ✅ vcruntime140.dll: {result.stdout.strip()}", "INFO")
+                    self.log_debug(f"  [SUCCESS] vcruntime140.dll: {result.stdout.strip()}", "INFO")
                 else:
-                    self.log_debug("  ❌ vcruntime140.dll: 未找到", "WARNING")
+                    self.log_debug("  [ERROR] vcruntime140.dll: 未找到", "WARNING")
             except Exception as e:
-                self.log_debug(f"  ❌ 检查vcruntime140.dll失败: {str(e)}", "ERROR")
+                self.log_debug(f"  [ERROR] 检查vcruntime140.dll失败: {str(e)}", "ERROR")
             
             self.log_debug("系统诊断完成", "INFO")
             
@@ -1050,6 +1145,10 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             precision_mode = self.precision_combo.currentText()
             self.log_debug(f"精度模式: {precision_mode}", "DEBUG")
             
+            # 🔥 检查OCR引擎状态，必要时重新初始化
+            if not self.ensure_ocr_ready(precision_mode):
+                return
+            
             try:
                 # 创建并启动PDF处理线程
                 self.pdf_thread = PDFOCRThread()
@@ -1092,6 +1191,10 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             precision_mode = self.precision_combo.currentText()
             self.log_debug(f"精度模式: {precision_mode}", "DEBUG")
             
+            # 🔥 检查OCR引擎状态，必要时重新初始化
+            if not self.ensure_ocr_ready(precision_mode):
+                return
+            
             try:
                 # 创建并启动图片处理线程
                 self.image_thread = ImageOCRThread()
@@ -1128,10 +1231,10 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         """处理结果回调"""
         if result.get("success", False):
             file_type = result.get("type", "文件")
-            self.update_status(f"✅ {file_type}处理成功！")
+            self.update_status(f"[SUCCESS] {file_type}处理成功！")
         else:
             error = result.get("error", "未知错误")
-            self.update_status(f"❌ 处理失败: {error}")
+            self.update_status(f"[ERROR] 处理失败: {error}")
     
     def on_processing_finished(self):
         """处理完成回调"""
@@ -1152,7 +1255,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         msg.exec_()
         
         mode_text = "🟢 离线运行" if self.offline_status else "🔴 在线运行"
-        self.update_status(f"✅ 就绪 - {mode_text}")
+        self.update_status(f"[SUCCESS] 就绪 - {mode_text}")
     
     def set_buttons_enabled(self, enabled):
         """设置按钮启用状态"""
@@ -1200,7 +1303,7 @@ def main():
             )
             sys.exit(1)
         
-        print("✅ 模型配置检查通过")
+        print("[SUCCESS] 模型配置检查通过")
         
         # 创建并显示主窗口
         main_window = OfflineInvoiceOCRMainWindow()

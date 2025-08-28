@@ -90,3 +90,45 @@ checkpoint/
 *.tmp
 *.temp
 *.nul
+nul
+
+# Build and packaging directories
+build_package/
+dist_package/
+python-embed/
+
+# Development files not for release
+test_*
+check_*
+analyze_*
+diagnose_*
+debug_*
+
+# Large binary files
+*.bin
+*.model
+*.onnx
+
+# Input/Output directories
+input/
+output/
+IMG/
+
+# Runtime files
+*.bat
+*.ps1
+
+# Configuration and metadata files generated
+ocr_config.yaml
+*.md
+!README.md
+!README_DEPLOYMENT.md
+
+# Static web files (if not needed in repo)
+static/
+templates/
+
+# OCR test images
+*.png
+*.jpg
+*.jpeg
