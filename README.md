@@ -4,6 +4,8 @@
 
 ## 快速开始
 
+详细图文教程可见[公众号文章](https://mp.weixin.qq.com/s/Lq1sZi8yvQCqVm6XSokrqw)
+
 ### Docker运行（推荐）
 
 镜像地址：[zhugua/invoicevision](https://hub.docker.com/repository/docker/zhugua/invoicevision/general)
