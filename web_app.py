@@ -60,8 +60,9 @@ app.config['UPLOAD_FOLDER'] = _resolve_dir('UPLOAD_DIR', '/app/input', 'input')
 app.config['RESULTS_FOLDER'] = _resolve_dir('RESULTS_DIR', '/app/output', 'output')
 app.config['MODELS_FOLDER'] = _resolve_dir('MODELS_DIR', '/app/models', 'models')
 
-# 初始化WebSocket
-socketio = SocketIO(app, cors_allowed_origins=os.environ.get('CORS_ORIGINS', '*'), async_mode='threading')
+# 初始化WebSocket（支持通过环境变量切换异步模式：threading/eventlet/gevent）
+ASYNC_MODE = os.environ.get('SOCKETIO_ASYNC_MODE', 'threading').lower()
+socketio = SocketIO(app, cors_allowed_origins=os.environ.get('CORS_ORIGINS', '*'), async_mode=ASYNC_MODE)
 
 # 添加静态文件路由处理
 @app.route('/static/<path:filename>')
@@ -71,6 +72,7 @@ def serve_static(filename):
 
 # 全局变量
 active_tasks = {}  # 存储活动任务
+active_tasks_lock = threading.Lock()
 model_manager = ModelManager()
 
 ALLOWED_EXTENSIONS = {
@@ -218,6 +220,8 @@ def index():
 def api_status():
     """API状态检查"""
     try:
+        # 清理过期任务
+        cleanup_tasks()
         # 检查模型状态
         status, message = model_manager.check_models_status()
         
@@ -319,26 +323,29 @@ def api_process():
             return jsonify({'error': '没有有效的文件可处理'}), 400
         
         # 存储任务
-        active_tasks[task_id] = {
-            'tasks': tasks,
-            'status': 'starting',
-            'results': [],
-            'created_at': datetime.now().isoformat()
-        }
+        with active_tasks_lock:
+            active_tasks[task_id] = {
+                'tasks': tasks,
+                'status': 'starting',
+                'results': [],
+                'created_at': datetime.now().isoformat()
+            }
         
         # 在后台线程中执行任务
         def run_tasks():
             try:
                 all_results = []
                 for task in tasks:
-                    active_tasks[task_id]['status'] = 'running'
+                    with active_tasks_lock:
+                        active_tasks[task_id]['status'] = 'running'
                     task.run()
                     if task.results:
                         all_results.extend(task.results)
                 
                 # 保存结果
-                active_tasks[task_id]['results'] = all_results
-                active_tasks[task_id]['status'] = 'completed'
+                with active_tasks_lock:
+                    active_tasks[task_id]['results'] = all_results
+                    active_tasks[task_id]['status'] = 'completed'
                 
                 # 发送最终完成通知到前端
                 emit_progress(task_id, f"🎉 处理完成！共识别 {len(all_results)} 条发票信息", 100, {
@@ -350,12 +357,17 @@ def api_process():
                 # 生成Excel文件
                 if all_results:
                     excel_path = save_results_to_excel(all_results, task_id)
-                    active_tasks[task_id]['excel_path'] = excel_path
+                    with active_tasks_lock:
+                        active_tasks[task_id]['excel_path'] = excel_path
                 
             except Exception as e:
-                active_tasks[task_id]['status'] = 'error'
-                active_tasks[task_id]['error'] = str(e)
+                with active_tasks_lock:
+                    active_tasks[task_id]['status'] = 'error'
+                    active_tasks[task_id]['error'] = str(e)
                 emit_progress(task_id, f"❌ 任务执行失败: {str(e)}", 0, {'error': str(e)})
+            finally:
+                # 任务完成后尝试清理过期任务
+                cleanup_tasks()
         
         threading.Thread(target=run_tasks, daemon=True).start()
         
@@ -371,6 +383,8 @@ def api_process():
 @app.route('/api/task/<task_id>')
 def api_task_status(task_id):
     """获取任务状态"""
+    # 周期性清理过期任务
+    cleanup_tasks()
     if task_id not in active_tasks:
         return jsonify({'error': '任务不存在'}), 404
     
@@ -546,6 +560,33 @@ def api_clear_files():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+def cleanup_tasks():
+    """清理过期任务，默认 TTL 30 分钟（仅清理已完成/错误的任务）"""
+    try:
+        ttl_minutes = int(os.environ.get('TASK_TTL_MINUTES', '30'))
+    except Exception:
+        ttl_minutes = 30
+    now = datetime.now()
+    to_delete = []
+    with active_tasks_lock:
+        for tid, info in list(active_tasks.items()):
+            status = info.get('status')
+            created = info.get('created_at')
+            if not created:
+                continue
+            try:
+                created_dt = datetime.fromisoformat(created)
+            except Exception:
+                continue
+            age_minutes = (now - created_dt).total_seconds() / 60.0
+            if status in ('completed', 'error') and age_minutes > ttl_minutes:
+                to_delete.append(tid)
+        for tid in to_delete:
+            del active_tasks[tid]
+    if to_delete:
+        print(f"清理过期任务 {len(to_delete)} 个: {to_delete}")
+
 
 def save_results_to_excel(results, task_id):
     """保存结果到Excel文件"""

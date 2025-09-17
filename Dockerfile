@@ -1,5 +1,5 @@
-# 使用官方 Python 3.11 镜像作为基础镜像
-FROM python:3.11-slim
+# 使用官方 Python 3.10 镜像作为基础镜像（Paddle生态兼容更好）
+FROM python:3.10-slim
 
 # 设置工作目录
 WORKDIR /app
@@ -8,27 +8,17 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 安装系统依赖（包含OpenCV和OCR所需的图形库）
-RUN apt-get update && apt-get install -y \
-    libglib2.0-0 \
+# 安装精简系统依赖（适配 headless OpenCV）
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgl1 \
     libglib2.0-0 \
-    libgtk-3-0 \
-    libfontconfig1 \
-    libopencv-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
 COPY requirements.txt .
 
-# 安装 Python 依赖（合并安装减小层数）
-RUN pip install --no-cache-dir -r requirements.txt flask flask-socketio gunicorn eventlet
+# 安装 Python 依赖（在 requirements.txt 中统一声明）
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制应用程序文件
 COPY . .
@@ -45,5 +35,8 @@ RUN chmod +x *.py
 # 暴露端口（Web服务）
 EXPOSE 8080
 
-# 设置入口点 - 默认启动Web界面
-CMD ["python", "web_app.py"]
+# 运行参数：生产环境使用 Gunicorn + Eventlet（与 Flask-SocketIO 兼容）
+ENV SOCKETIO_ASYNC_MODE=eventlet
+
+# 设置入口点 - 生产模式使用 Gunicorn
+CMD ["gunicorn", "-k", "eventlet", "-w", "1", "-b", "0.0.0.0:8080", "web_app:app"]

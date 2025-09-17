@@ -13,6 +13,7 @@ services:
       - PYTHONUNBUFFERED=1
       - FLASK_ENV=production
       - MAX_CONTENT_LENGTH=500MB
+      - SOCKETIO_ASYNC_MODE=eventlet  # 与 Gunicorn 配置一致
     restart: unless-stopped
     deploy:
       resources:
