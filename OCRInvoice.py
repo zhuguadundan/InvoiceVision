@@ -188,41 +188,15 @@ class OfflineOCRInvoice:
                 
                 models = temp_instance.offline_config.get("models", {})
                 
-                # EasyOCR引擎初始化 - PyInstaller友好
-                try:
-                    import easyocr
-                    print("EasyOCR模块导入成功")
-                    
-                    # 创建EasyOCR实例，支持中英文
-                    cls._shared_ocr_engine = easyocr.Reader(['ch_sim', 'en'], 
-                                                          gpu=False,  # 使用CPU模式
-                                                          verbose=False)
-                    cls._initialization_status = "ready"
-                    print("[SUCCESS] 全局EasyOCR引擎初始化成功")
-                    return True
-                    
-                except Exception as easyocr_error:
-                    # EasyOCR失败，尝试导入PaddleOCR作为后备
-                    print(f"EasyOCR初始化失败: {easyocr_error}")
-                    print("尝试使用PaddleOCR作为后备方案...")
-                    
-                    try:
-                        from paddleocr import PaddleOCR
-                        print("PaddleOCR模块导入成功")
-                        
-                        # 使用官方OCR pipeline
-                        cls._shared_ocr_engine = PaddleOCR(use_angle_cls=precision_mode == '高精', 
-                                                         lang='ch')
-                        cls._initialization_status = "ready"  
-                        print("[SUCCESS] 全局PaddleOCR引擎初始化成功(后备模式)")
-                        return True
-                        
-                    except Exception as paddle_error:
-                        cls._initialization_status = "failed"
-                        print(f"[ERROR] 所有OCR引擎初始化失败")
-                        print(f"EasyOCR错误: {easyocr_error}")
-                        print(f"PaddleOCR错误: {paddle_error}")
-                        return False
+                # 仅使用 PaddleOCR 初始化
+                from paddleocr import PaddleOCR
+                print("PaddleOCR模块导入成功")
+                
+                # 使用官方OCR pipeline
+                cls._shared_ocr_engine = PaddleOCR(use_angle_cls=precision_mode == '高精', lang='ch')
+                cls._initialization_status = "ready"
+                print("[SUCCESS] 全局PaddleOCR引擎初始化成功")
+                return True
                         
             except ImportError as e:
                 cls._initialization_status = "failed"
@@ -287,15 +261,9 @@ class OfflineOCRInvoice:
                 pil_image = Image.open(image_path)
                 img = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
             
-            # 执行OCR识别 - 兼容EasyOCR和PaddleOCR
-            if hasattr(self.ocr_engine, 'readtext'):
-                # EasyOCR API
-                result = self.ocr_engine.readtext(img)
-                texts = self._extract_texts_from_easyocr_result(result)
-            else:
-                # PaddleOCR API  
-                result = self.ocr_engine.ocr(img)
-                texts = self._extract_texts_from_result(result)
+            # 执行OCR识别（PaddleOCR）
+            result = self.ocr_engine.ocr(img)
+            texts = self._extract_texts_from_result(result)
             
             if not texts:
                 print("OCR未识别到任何文本")
@@ -308,16 +276,9 @@ class OfflineOCRInvoice:
                 print("未检测到发票关键词，尝试旋转图片...")
                 img_rotated = cv2.rotate(img, cv2.ROTATE_180)
                 
-                # 旋转后再次OCR识别 - 兼容两种API
-                if hasattr(self.ocr_engine, 'readtext'):
-                    # EasyOCR API
-                    result = self.ocr_engine.readtext(img_rotated)
-                    texts = self._extract_texts_from_easyocr_result(result)
-                else:
-                    # PaddleOCR API
-                    result = self.ocr_engine.ocr(img_rotated)
-                    texts = self._extract_texts_from_result(result)
-                    
+                # 旋转后再次OCR识别（PaddleOCR）
+                result = self.ocr_engine.ocr(img_rotated)
+                texts = self._extract_texts_from_result(result)
                 combined_text = '【' + '】【'.join(texts) + '】'
             
             # 提取发票信息
@@ -358,23 +319,7 @@ class OfflineOCRInvoice:
             print(f"文本提取出错: {e}")
         return texts
     
-    def _extract_texts_from_easyocr_result(self, result):
-        """从EasyOCR结果中提取文本"""
-        texts = []
-        try:
-            # EasyOCR返回格式：[(bbox, text, confidence), ...]
-            for detection in result:
-                if len(detection) >= 2:
-                    text = detection[1].strip()  # detection[1]是识别的文本
-                    if text:
-                        texts.append(text)
-            
-            print(f"EasyOCR识别到{len(texts)}条文本")
-            return texts
-            
-        except Exception as e:
-            print(f"EasyOCR文本提取出错: {e}")
-            return []
+    # 已移除 EasyOCR 解析路径，仅保留 PaddleOCR
     
     def _contains_invoice_keywords(self, text):
         """检查文本是否包含发票关键词"""

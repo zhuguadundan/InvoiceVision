@@ -83,6 +83,36 @@ class ImageOCRThread(OfflineOCRThread):
         finally:
             self.finished.emit()
 
+class PDFBatchOCRThread(OfflineOCRThread):
+    """PDF 批量离线OCR处理线程"""
+    def __init__(self):
+        super().__init__()
+        self.files = []  # PDF 文件列表
+    
+    def run(self):
+        try:
+            total = len(self.files)
+            success_count = 0
+            for idx, pdf_path in enumerate(self.files, start=1):
+                self.progress.emit(f"正在处理PDF ({idx}/{total}): {os.path.basename(pdf_path)}")
+                try:
+                    result = ocr_pdf_offline(pdf_path, self.precision_mode, self.output_dir)
+                    if result:
+                        self.ocr_result.emit(result)
+                        # 统计识别成功的条数（粗略按是否有数据判断）
+                        if result.get('invoice_data'):
+                            success_count += 1
+                except Exception as e:
+                    self.progress.emit(f"处理出错: {os.path.basename(pdf_path)} - {e}")
+            
+            self.progress.emit(f"PDF批量处理完成，共 {total} 个，成功 {success_count} 个")
+            self.result.emit({"success": True, "type": "PDF批量", "result": {"total": total, "success": success_count}})
+        except Exception as e:
+            self.progress.emit(f"批量处理出错: {e}")
+            self.result.emit({"success": False, "error": str(e)})
+        finally:
+            self.finished.emit()
+
 class OfflineInvoiceOCRMainWindow(QMainWindow):
     """离线版主窗口类 - 现代化界面"""
     
@@ -1133,15 +1163,15 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         """处理PDF文件"""
         self.log_debug("准备处理PDF文件...", "INFO")
         
-        file_path, _ = QFileDialog.getOpenFileName(
+        file_paths, _ = QFileDialog.getOpenFileNames(
             self, 
-            '选择PDF文件', 
+            '选择PDF文件（可多选）', 
             './', 
             'PDF文件 (*.pdf)'
         )
         
-        if file_path:
-            self.log_debug(f"选择的PDF文件: {file_path}", "INFO")
+        if file_paths:
+            self.log_debug(f"选择的PDF文件数: {len(file_paths)}", "INFO")
             precision_mode = self.precision_combo.currentText()
             self.log_debug(f"精度模式: {precision_mode}", "DEBUG")
             
@@ -1150,9 +1180,9 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 return
             
             try:
-                # 创建并启动PDF处理线程
-                self.pdf_thread = PDFOCRThread()
-                self.pdf_thread.file_path = file_path
+                # 创建并启动PDF批量处理线程
+                self.pdf_thread = PDFBatchOCRThread()
+                self.pdf_thread.files = file_paths
                 self.pdf_thread.precision_mode = precision_mode
                 self.pdf_thread.output_dir = self.output_dir  # 设置输出目录
                 self.pdf_thread.progress.connect(self.update_status)
@@ -1164,8 +1194,11 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 self.set_buttons_enabled(False)
                 self.progress_bar.setVisible(True)
                 self.progress_bar.setRange(0, 0)  # 不确定进度
-                self.update_status(f"📄 开始处理PDF: {os.path.basename(file_path)}")
-                self.log_debug("启动PDF处理线程...", "DEBUG")
+                if len(file_paths) == 1:
+                    self.update_status(f"📄 开始处理PDF: {os.path.basename(file_paths[0])}")
+                else:
+                    self.update_status(f"📄 开始批量处理PDF: {len(file_paths)} 个")
+                self.log_debug("启动PDF批量处理线程...", "DEBUG")
                 self.pdf_thread.start()
                 
             except Exception as e:
@@ -1267,13 +1300,20 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
     
     def closeEvent(self, event):
         """窗口关闭事件"""
-        # 确保线程正常结束
-        if self.pdf_thread and self.pdf_thread.isRunning():
-            self.pdf_thread.terminate()
-            self.pdf_thread.wait()
-        if self.image_thread and self.image_thread.isRunning():
-            self.image_thread.terminate()
-            self.image_thread.wait()
+        # 优先温和中止线程，超时后再强制结束
+        for t in (self.pdf_thread, self.image_thread):
+            try:
+                if t and t.isRunning():
+                    try:
+                        t.requestInterruption()
+                    except Exception:
+                        pass
+                    # 尝试优雅退出
+                    if not t.wait(5000):
+                        t.terminate()
+                        t.wait(1000)
+            except Exception:
+                pass
         event.accept()
 
 def main():
