@@ -30,7 +30,7 @@ def ocr_pdf_offline(pdf_path, precision_mode, output_dir=None):
         # 转换PDF为图片
         print("正在将PDF转换为图片...")
         pdf_converter = pdf2img()
-        pdf_converter.pyMuPDF_fitz(pdf_path)
+        pdf_converter.pyMuPDF_fitz(pdf_path, output_dir=output_dir)
         print(f"PDF转换完成，图片保存路径: {pdf_converter.imagePath}")
         
         # 初始化离线OCR识别器 - 使用全局预初始化的引擎
@@ -51,6 +51,9 @@ def ocr_pdf_offline(pdf_path, precision_mode, output_dir=None):
         # 处理所有转换后的图片
         item_no = 1
         processed_count = 0
+        
+        # 确保在路径不存在时变量可用，避免 NameError
+        image_files = []
         
         if os.path.exists(pdf_converter.imagePath):
             image_files = [f for f in listdir(pdf_converter.imagePath) 
@@ -153,6 +156,9 @@ def ocr_images_offline(image_folder_path, precision_mode, output_dir=None):
         item_no = 1
         processed_count = 0
         supported_formats = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp')
+        
+        # 确保在路径不存在时变量可用，避免 NameError
+        image_files = []
         
         if os.path.exists(image_folder_path):
             image_files = [f for f in listdir(image_folder_path) 

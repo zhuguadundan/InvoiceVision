@@ -19,6 +19,7 @@ import zipfile
 import time
 import sys
 import traceback
+import secrets
 
 # 导入核心OCR模块
 try:
@@ -42,19 +43,25 @@ except ImportError as e:
             return "missing", "模型管理器不可用"
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'invoice-vision-web-interface'
-app.config['UPLOAD_FOLDER'] = '/app/input'
-app.config['RESULTS_FOLDER'] = '/app/output'
-app.config['MODELS_FOLDER'] = '/app/models'
+# 从环境变量加载密钥，默认生成随机密钥（更安全）
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(16))
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB
 
-# 确保目录存在
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['RESULTS_FOLDER'], exist_ok=True)
-os.makedirs(app.config['MODELS_FOLDER'], exist_ok=True)
+# 在容器以外环境下提供目录回退（也支持通过环境变量覆盖）
+def _resolve_dir(env_key, default_container_path, fallback_name):
+    p = os.environ.get(env_key, default_container_path)
+    # 若路径不存在，则使用当前工作目录下的回退目录
+    if not os.path.isabs(p) or (os.path.isabs(p) and not os.path.exists(p)):
+        p = os.path.join(os.getcwd(), fallback_name)
+    os.makedirs(p, exist_ok=True)
+    return p
+
+app.config['UPLOAD_FOLDER'] = _resolve_dir('UPLOAD_DIR', '/app/input', 'input')
+app.config['RESULTS_FOLDER'] = _resolve_dir('RESULTS_DIR', '/app/output', 'output')
+app.config['MODELS_FOLDER'] = _resolve_dir('MODELS_DIR', '/app/models', 'models')
 
 # 初始化WebSocket
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins=os.environ.get('CORS_ORIGINS', '*'), async_mode='threading')
 
 # 添加静态文件路由处理
 @app.route('/static/<path:filename>')

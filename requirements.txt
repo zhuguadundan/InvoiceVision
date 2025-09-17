@@ -1,9 +1,9 @@
 # 发票OCR识别器依赖包列表 - 纯离线版本
 # 适用于 PaddleOCR 3.1+ 版本
 
-# 核心OCR依赖
+# 核心OCR依赖（PaddleOCR）
 paddleocr>=3.1.0
-paddlepaddle>=3.0.0
+paddlepaddle
 
 # 图像处理
 pillow>=8.0.0
@@ -12,6 +12,7 @@ opencv-contrib-python>=4.10.0
 # 数据处理
 pandas>=1.3.0
 numpy>=1.24.0
+openpyxl>=3.1.0  # Excel 导出引擎
 
 # PDF处理
 pymupdf>=1.20.0
@@ -22,3 +23,5 @@ pyqt5>=5.15.0
 # 其他工具
 pyyaml>=6.0
 typing-extensions>=4.12.0
+shapely>=2.0.0
+pyclipper>=1.3.0.post5
