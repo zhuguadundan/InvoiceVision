@@ -9,9 +9,18 @@ import sys
 import json
 import shutil
 from pathlib import Path
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar, QTextEdit, QMessageBox, QFileDialog
-from PyQt5.QtCore import QThread, pyqtSignal, Qt
-from PyQt5.QtGui import QFont
+
+# 尝试懒加载 PyQt5（在无GUI环境下保持可导入）
+try:
+    from PyQt5.QtWidgets import (
+        QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar,
+        QTextEdit, QMessageBox, QFileDialog
+    )
+    from PyQt5.QtCore import QThread, pyqtSignal, Qt
+    from PyQt5.QtGui import QFont
+    HAS_QT = True
+except Exception:
+    HAS_QT = False
 
 class ModelManager:
     """模型管理器"""
@@ -133,124 +142,131 @@ class ModelManager:
             return "complete", "所有模型完整"
 
 
-class ModelSetupDialog(QDialog):
-    """模型设置对话框 - 仅支持本地复制"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.model_manager = ModelManager()
-        self.init_ui()
+if HAS_QT:
+    class ModelSetupDialog(QDialog):
+        """模型设置对话框 - 仅支持本地复制"""
         
-    def init_ui(self):
-        """初始化UI"""
-        self.setWindowTitle("InvoiceVision - 模型配置")
-        self.setFixedSize(500, 350)
-        self.setModal(True)
-        
-        layout = QVBoxLayout()
-        
-        # 标题
-        title_label = QLabel("AI模型配置")
-        title_label.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
-        title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
-        
-        # 说明文字
-        desc_label = QLabel(
-            "InvoiceVision需要AI模型文件才能正常工作。\n"
-            "请从现有位置复制模型文件到本地。"
-        )
-        desc_label.setWordWrap(True)
-        layout.addWidget(desc_label)
-        
-        # 模型状态信息
-        self.status_text = QTextEdit()
-        self.status_text.setMaximumHeight(150)
-        self.status_text.setReadOnly(True)
-        layout.addWidget(self.status_text)
-        
-        # 按钮区域
-        button_layout = QHBoxLayout()
-        
-        self.copy_button = QPushButton("从本地复制模型")
-        self.copy_button.clicked.connect(self.copy_models)
-        button_layout.addWidget(self.copy_button)
-        
-        layout.addLayout(button_layout)
-        
-        # 关闭按钮
-        self.close_button = QPushButton("稍后配置")
-        self.close_button.clicked.connect(self.reject)
-        layout.addWidget(self.close_button)
-        
-        self.setLayout(layout)
-        
-        # 更新状态信息
-        self.update_status()
-        
-    def update_status(self):
-        """更新模型状态信息"""
-        info = self.model_manager.get_models_info()
-        
-        status_text = f"模型目录: {info['models_dir']}\n"
-        status_text += f"目录存在: {'是' if info['exists'] else '否'}\n"
-        status_text += f"模型完整: {'是' if info['complete'] else '否'}\n\n"
-        
-        status_text += "必需的模型文件:\n"
-        for model_name, model_info in info['models'].items():
-            status = "✓" if model_info['exists'] else "✗"
-            size_mb = model_info['size'] / 1024 / 1024 if model_info['size'] > 0 else 0
-            status_text += f"{status} {model_name} ({size_mb:.1f} MB)\n"
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.model_manager = ModelManager()
+            self.init_ui()
             
-        self.status_text.setPlainText(status_text)
-        
-        # 如果模型已完整，启用确定按钮
-        if info['complete']:
-            self.close_button.setText("确定")
-            self.close_button.clicked.disconnect()
-            self.close_button.clicked.connect(self.accept)
-    
-    def copy_models(self):
-        """从本地复制模型"""
-        source_dir = QFileDialog.getExistingDirectory(
-            self, 
-            "选择包含模型文件的目录",
-            "",
-            QFileDialog.ShowDirsOnly
-        )
-        
-        if not source_dir:
-            return
+        def init_ui(self):
+            """初始化UI"""
+            self.setWindowTitle("InvoiceVision - 模型配置")
+            self.setFixedSize(500, 350)
+            self.setModal(True)
             
-        try:
-            self.model_manager.copy_models_from_source(source_dir)
-            QMessageBox.information(self, "成功", "模型文件复制完成！")
+            layout = QVBoxLayout()
+            
+            # 标题
+            title_label = QLabel("AI模型配置")
+            title_label.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
+            title_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(title_label)
+            
+            # 说明文字
+            desc_label = QLabel(
+                "InvoiceVision需要AI模型文件才能正常工作。\n"
+                "请从现有位置复制模型文件到本地。"
+            )
+            desc_label.setWordWrap(True)
+            layout.addWidget(desc_label)
+            
+            # 模型状态信息
+            self.status_text = QTextEdit()
+            self.status_text.setMaximumHeight(150)
+            self.status_text.setReadOnly(True)
+            layout.addWidget(self.status_text)
+            
+            # 按钮区域
+            button_layout = QHBoxLayout()
+            
+            self.copy_button = QPushButton("从本地复制模型")
+            self.copy_button.clicked.connect(self.copy_models)
+            button_layout.addWidget(self.copy_button)
+            
+            layout.addLayout(button_layout)
+            
+            # 关闭按钮
+            self.close_button = QPushButton("稍后配置")
+            self.close_button.clicked.connect(self.reject)
+            layout.addWidget(self.close_button)
+            
+            self.setLayout(layout)
+            
+            # 更新状态信息
             self.update_status()
             
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"复制模型文件失败:\n{str(e)}")
+        def update_status(self):
+            """更新模型状态信息"""
+            info = self.model_manager.get_models_info()
+            
+            status_text = f"模型目录: {info['models_dir']}\n"
+            status_text += f"目录存在: {'是' if info['exists'] else '否'}\n"
+            status_text += f"模型完整: {'是' if info['complete'] else '否'}\n\n"
+            
+            status_text += "必需的模型文件:\n"
+            for model_name, model_info in info['models'].items():
+                status = "✓" if model_info['exists'] else "✗"
+                size_mb = model_info['size'] / 1024 / 1024 if model_info['size'] > 0 else 0
+                status_text += f"{status} {model_name} ({size_mb:.1f} MB)\n"
+                
+            self.status_text.setPlainText(status_text)
+            
+            # 如果模型已完整，启用确定按钮
+            if info['complete']:
+                self.close_button.setText("确定")
+                try:
+                    self.close_button.clicked.disconnect()
+                except Exception:
+                    pass
+                self.close_button.clicked.connect(self.accept)
+        
+        def copy_models(self):
+            """从本地复制模型"""
+            source_dir = QFileDialog.getExistingDirectory(
+                self, 
+                "选择包含模型文件的目录",
+                "",
+                QFileDialog.ShowDirsOnly
+            )
+            
+            if not source_dir:
+                return
+                
+            try:
+                self.model_manager.copy_models_from_source(source_dir)
+                QMessageBox.information(self, "成功", "模型文件复制完成！")
+                self.update_status()
+                
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"复制模型文件失败:\n{str(e)}")
 
-
-def check_and_setup_models():
-    """检查并设置模型，返回是否设置成功"""
-    manager = ModelManager()
-    
-    # 如果模型已完整，直接返回True
-    if manager.check_models_complete():
-        return True
-    
-    # 否则显示配置对话框
-    from PyQt5.QtWidgets import QApplication
-    
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-    
-    dialog = ModelSetupDialog()
-    result = dialog.exec_()
-    
-    # 再次检查模型是否完整
-    return result == QDialog.Accepted and manager.check_models_complete()
+    def check_and_setup_models():
+        """检查并设置模型，返回是否设置成功"""
+        manager = ModelManager()
+        
+        # 如果模型已完整，直接返回True
+        if manager.check_models_complete():
+            return True
+        
+        # 否则显示配置对话框
+        from PyQt5.QtWidgets import QApplication
+        
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        
+        dialog = ModelSetupDialog()
+        result = dialog.exec_()
+        
+        # 再次检查模型是否完整
+        return result == QDialog.Accepted and manager.check_models_complete()
+else:
+    # 无 GUI 环境下的降级实现
+    def check_and_setup_models():
+        return False
 
 
 if __name__ == "__main__":
