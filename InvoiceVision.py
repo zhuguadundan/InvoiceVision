@@ -936,19 +936,11 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 ('scikit-image', 'skimage')
             ]
             
-            # PaddleOCR 相关模块 - 一次性检查所有依赖
+            # PaddleOCR 相关模块 - 一次性检查所有依赖（移除PaddleX依赖以减少打包耦合）
             paddle_modules = [
                 ('PaddleOCR', 'paddleocr'),
                 ('PaddlePaddle', 'paddle'),
                 ('huggingface_hub', 'huggingface_hub'),
-                ('paddlex', 'paddlex'),
-                ('paddlex.inference', 'paddlex.inference'),
-                ('paddlex.modules', 'paddlex.modules'),
-                ('paddlex.repo_apis', 'paddlex.repo_apis'),
-                ('paddlex.repo_apis.base', 'paddlex.repo_apis.base'),
-                ('paddlex.modules.doc_vlm', 'paddlex.modules.doc_vlm'),
-                ('paddlex.modules.formula_recognition', 'paddlex.modules.formula_recognition'),
-                ('paddlex.utils.misc', 'paddlex.utils.misc'),
             ]
             
             self.log_debug("检查关键模块依赖:", "INFO")
@@ -997,25 +989,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                     self.log_debug(f"  [ERROR] {name}: {str(e)}", "ERROR")
                     paddle_errors.append((name, str(e)))
             
-            # 额外检查常见的PaddleX子模块
-            try:
-                import pkgutil
-                self.log_debug("检测PaddleX子模块:", "INFO")
-                try:
-                    import paddlex
-                    for _, name, _ in pkgutil.iter_modules(paddlex.__path__):
-                        full_module = f'paddlex.{name}'
-                        try:
-                            __import__(full_module)
-                            self.log_debug(f"  [SUCCESS] {full_module}", "INFO")
-                        except ImportError as e:
-                            self.log_debug(f"  [ERROR] {full_module}: {str(e)}", "ERROR")
-                            paddle_errors.append((full_module, str(e)))
-                except ImportError:
-                    self.log_debug("  [ERROR] paddlex 主模块不可用", "ERROR")
-                    paddle_errors.append(('paddlex', 'paddlex 主模块不可用'))
-            except Exception as e:
-                self.log_debug(f"  ⚠️ 无法自动检测PaddleX子模块: {str(e)}", "WARNING")
+            # 已移除 PaddleX 子模块扫描，避免无关错误提示
             
             # 一次性显示所有导入错误汇总
             all_errors = critical_errors + paddle_errors
