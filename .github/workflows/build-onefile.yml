@@ -1,0 +1,59 @@
+name: build-windows-onefile
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-onefile.yml'
+      - 'InvoiceVision.py'
+      - 'OCRInvoice.py'
+      - 'MainAction.py'
+      - 'requirements.txt'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Upgrade pip
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: Install core deps (no GUI models)
+        run: |
+          pip install -r requirements.txt
+          # Paddle 生态（Windows CPU）。使用官方 whl 索引链接以提高成功率
+          pip install "paddlepaddle==2.5.2" -f https://www.paddlepaddle.org.cn/whl/windows/mkl/ --no-cache-dir
+          # 安装 paddleocr（旧版，无依赖），并手动补齐常用依赖，避免 albucore/stringzilla 编译
+          pip install paddleocr==2.7.0.3 --no-deps
+          pip install numpy shapely pyclipper scikit-image opencv-python-headless Pillow PyYAML rapidfuzz lmdb tqdm python-docx requests fire fonttools PyMuPDF
+          # 打包工具
+          pip install pyinstaller
+
+      - name: Build onefile with PyInstaller (external models)
+        run: |
+          pyinstaller --noconfirm --clean --onefile --name InvoiceVision --noconsole ^
+            --collect-data paddleocr ^
+            --collect-binaries paddle ^
+            --add-data "offline_config.json;." ^
+            --add-data "resource_utils.py;." ^
+            --add-data "static;static" ^
+            --add-data "templates;templates" ^
+            InvoiceVision.py
+
+      - name: List dist
+        run: dir dist
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InvoiceVision-onefile
+          path: dist/InvoiceVision.exe
+          if-no-files-found: error
