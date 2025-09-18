@@ -16,13 +16,20 @@ sys.path.insert(0, str(project_root))
 # 设置工作目录
 os.chdir(str(project_root))
 
-# 直接执行原始的InvoiceVision.py
+# 以模块方式启动，避免使用 exec
 if __name__ == "__main__":
     try:
-        exec(open('InvoiceVision.py', encoding='utf-8').read())
+        from InvoiceVision import main as run_app
+        run_app()
     except Exception as e:
         print(f"启动失败: {e}")
         import traceback
         traceback.print_exc()
-        input("按任意键退出...")
+        # 仅在交互式终端中暂停，避免无头环境卡住
+        try:
+            if sys.stdin and sys.stdin.isatty():
+                input("按任意键退出...")
+        except Exception:
+            pass
         sys.exit(1)
+

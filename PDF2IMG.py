@@ -2,9 +2,10 @@ import sys, fitz
 from os import path, makedirs
 import datetime
 import os
+from pathlib import Path
 
 class pdf2img:
-    def pyMuPDF_fitz(self, pdfPath):
+    def pyMuPDF_fitz(self, pdfPath, output_dir=None):
         self.imagePath = ''
         startTime_pdf2img = datetime.datetime.now()  # 开始时间
         
@@ -36,7 +37,12 @@ class pdf2img:
         if not clean_filename.strip() or len(clean_filename) < 1:
             clean_filename = hashlib.md5(base_filename.encode('utf-8')).hexdigest()[:12]
             
-        self.imagePath = f'IMG/{clean_filename}'
+        # 允许由调用方指定输出根目录；默认为工程下的 IMG 目录
+        base_dir = Path(output_dir) if output_dir else Path('IMG')
+        # 若指定的目录不是以 IMG 结尾，则在其下创建 IMG 子目录，避免污染输出根
+        if base_dir.name.lower() != 'img':
+            base_dir = base_dir / 'IMG'
+        self.imagePath = str(base_dir / clean_filename)
         
         try:
             pdfDoc = fitz.open(pdfPath)
