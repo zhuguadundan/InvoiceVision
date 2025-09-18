@@ -413,12 +413,17 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         actions_group = QGroupBox("🛠️ 操作")
         actions_layout = QVBoxLayout(actions_group)
         
-        # PDF处理按钮
-        self.pdf_button = QPushButton("🗃️ 处理PDF文件")
+        # PDF处理按钮（文件多选）
+        self.pdf_button = QPushButton("🗃️ 处理PDF文件（可多选）")
         self.pdf_button.clicked.connect(self.handle_pdf_file)
         actions_layout.addWidget(self.pdf_button)
         
-        # 图片处理按钮
+        # PDF文件夹处理按钮（递归处理所有PDF）
+        self.pdf_folder_button = QPushButton("📂 处理PDF文件夹（含子目录）")
+        self.pdf_folder_button.clicked.connect(self.handle_pdf_folder)
+        actions_layout.addWidget(self.pdf_folder_button)
+        
+        # 图片处理按钮（图片文件夹）
         self.image_button = QPushButton("🖼️ 处理图片文件夹")
         self.image_button.clicked.connect(self.handle_image_folder)
         actions_layout.addWidget(self.image_button)
@@ -1255,6 +1260,65 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
         else:
             self.log_debug("用户取消了图片文件夹选择", "DEBUG")
     
+    def handle_pdf_folder(self):
+        """处理PDF文件夹（递归查找所有PDF）"""
+        self.log_debug("准备处理PDF文件夹...", "INFO")
+        
+        folder_path = QFileDialog.getExistingDirectory(
+            self,
+            '选择包含PDF的文件夹',
+            './'
+        )
+        
+        if not folder_path:
+            self.log_debug("用户取消了PDF文件夹选择", "DEBUG")
+            return
+        
+        # 递归收集PDF
+        pdf_files = []
+        for root, dirs, files in os.walk(folder_path):
+            for name in files:
+                if name.lower().endswith('.pdf'):
+                    pdf_files.append(os.path.join(root, name))
+        
+        if not pdf_files:
+            QMessageBox.information(self, "提示", "所选文件夹中未发现PDF文件。")
+            return
+        
+        self.log_debug(f"发现PDF文件 {len(pdf_files)} 个", "INFO")
+        precision_mode = self.precision_combo.currentText()
+        self.log_debug(f"精度模式: {precision_mode}", "DEBUG")
+        
+        # 🔥 检查OCR引擎状态，必要时重新初始化
+        if not self.ensure_ocr_ready(precision_mode):
+            return
+        
+        try:
+            # 创建并启动PDF批量处理线程
+            self.pdf_thread = PDFBatchOCRThread()
+            self.pdf_thread.files = pdf_files
+            self.pdf_thread.precision_mode = precision_mode
+            self.pdf_thread.output_dir = self.output_dir
+            self.pdf_thread.progress.connect(self.update_status)
+            self.pdf_thread.result.connect(self.on_processing_result)
+            self.pdf_thread.finished.connect(self.on_processing_finished)
+            self.pdf_thread.ocr_result.connect(self.display_ocr_results)
+            
+            # 禁用按钮，显示进度条，开始处理
+            self.set_buttons_enabled(False)
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setRange(0, 0)
+            folder_name = os.path.basename(folder_path) or folder_path
+            self.update_status(f"📂 开始批量处理PDF（{folder_name}）：共 {len(pdf_files)} 个")
+            self.log_debug("启动PDF批量处理线程（文件夹）...", "DEBUG")
+            self.pdf_thread.start()
+        
+        except Exception as e:
+            self.log_debug(f"PDF批量处理失败: {str(e)}", "ERROR")
+            import traceback
+            self.log_debug(f"错误详情:\n{traceback.format_exc()}", "ERROR")
+            QMessageBox.critical(self, "错误", f"PDF批量处理失败:\n{str(e)}")
+    
     def update_status(self, message):
         """更新状态显示"""
         self.status_label.setText(message)
@@ -1293,6 +1357,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
     def set_buttons_enabled(self, enabled):
         """设置按钮启用状态"""
         self.pdf_button.setEnabled(enabled)
+        self.pdf_folder_button.setEnabled(enabled)
         self.image_button.setEnabled(enabled)
         self.precision_combo.setEnabled(enabled)
         self.model_status_btn.setEnabled(enabled)
