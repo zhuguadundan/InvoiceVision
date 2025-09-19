@@ -9,6 +9,10 @@ import sys
 import json
 import shutil
 from pathlib import Path
+import tarfile
+import tempfile
+from urllib.request import urlopen
+from urllib.error import URLError, HTTPError
 
 # 尝试懒加载 PyQt5（在无GUI环境下保持可导入）
 try:
@@ -120,6 +124,80 @@ class ModelManager:
                 shutil.copytree(source_model, target_model)
             else:
                 raise FileNotFoundError(f"源目录中缺少模型: {model_name}")
+
+    # ========== 恢复并增强：直接下载模型功能 ==========
+    def download_models(self):
+        """下载轻量模型（PP-OCRv5 mobile det/rec + ch_ppocr_mobile_v2.0_cls）。
+
+        返回:
+            bool: 全部下载/就绪返回 True，任一失败返回 False
+        """
+        self.models_dir.mkdir(parents=True, exist_ok=True)
+
+        # 官方模型直链（以 inference 模型为准）；det 如 v5 不可用，则回退至 v4 mobile det
+        candidates = {
+            "PP-OCRv5_mobile_rec": [
+                "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_rec_infer.tar",
+            ],
+            "PP-OCRv5_mobile_det": [
+                # 先尝试 v5 mobile det（若暂不可用，将回退 v4）
+                "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_det_infer.tar",
+                "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv4_mobile_det_infer.tar",
+            ],
+            "ch_ppocr_mobile_v2.0_cls": [
+                "https://paddleocr.bj.bcebos.com/dygraph_v2.0/ch/ch_ppocr_mobile_v2.0_cls_infer.tar",
+            ],
+        }
+
+        def need_download(dir_name: str) -> bool:
+            d = self.models_dir / dir_name
+            return (not d.exists()) or (d.exists() and not any(d.iterdir()))
+
+        def extract_tar_to(tar_path: Path, target_dir: Path) -> None:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(tar_path, 'r') as tar:
+                tar.extractall(path=target_dir)
+            # 若出现 *_infer 子目录，则将其中文件上移至目标目录根
+            subdirs = [p for p in target_dir.iterdir() if p.is_dir()]
+            if len(subdirs) == 1 and (subdirs[0].name.endswith('_infer') or subdirs[0].name.endswith('_inference')):
+                inner = subdirs[0]
+                for item in inner.iterdir():
+                    shutil.move(str(item), str(target_dir / item.name))
+                shutil.rmtree(inner, ignore_errors=True)
+
+        def download_and_extract(url: str, target_dir: Path) -> bool:
+            try:
+                with urlopen(url, timeout=30) as resp:
+                    if getattr(resp, 'status', 200) != 200:
+                        return False
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.tar') as tmpf:
+                        tmpf.write(resp.read())
+                        tmp_path = Path(tmpf.name)
+                extract_tar_to(tmp_path, target_dir)
+                try:
+                    tmp_path.unlink(missing_ok=True)  # Py3.8 兼容：若报错则忽略
+                except Exception:
+                    pass
+                return True
+            except (HTTPError, URLError):
+                return False
+            except Exception:
+                return False
+
+        overall_ok = True
+        for dir_name, urls in candidates.items():
+            if not need_download(dir_name):
+                continue
+            ok = False
+            target = self.models_dir / dir_name
+            for u in urls:
+                if download_and_extract(u, target):
+                    ok = True
+                    break
+            if not ok:
+                overall_ok = False
+
+        return overall_ok
     
     def check_models_status(self):
         """检查模型状态 - InvoiceVision兼容接口"""
@@ -143,8 +221,8 @@ class ModelManager:
 
 
 if HAS_QT:
-    class ModelSetupDialog(QDialog):
-        """模型设置对话框 - 仅支持本地复制"""
+class ModelSetupDialog(QDialog):
+    """模型设置对话框 - 支持本地复制与直接下载"""
         
         def __init__(self, parent=None):
             super().__init__(parent)
@@ -179,14 +257,18 @@ if HAS_QT:
             self.status_text.setReadOnly(True)
             layout.addWidget(self.status_text)
             
-            # 按钮区域
-            button_layout = QHBoxLayout()
-            
-            self.copy_button = QPushButton("从本地复制模型")
-            self.copy_button.clicked.connect(self.copy_models)
-            button_layout.addWidget(self.copy_button)
-            
-            layout.addLayout(button_layout)
+        # 按钮区域
+        button_layout = QHBoxLayout()
+        
+        self.copy_button = QPushButton("从本地复制模型")
+        self.copy_button.clicked.connect(self.copy_models)
+        button_layout.addWidget(self.copy_button)
+
+        self.download_button = QPushButton("下载轻量模型")
+        self.download_button.clicked.connect(self.download_models)
+        button_layout.addWidget(self.download_button)
+
+        layout.addLayout(button_layout)
             
             # 关闭按钮
             self.close_button = QPushButton("稍后配置")
@@ -242,6 +324,21 @@ if HAS_QT:
                 
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"复制模型文件失败:\n{str(e)}")
+
+        def download_models(self):
+            """直接下载轻量模型到 models/ 目录"""
+            try:
+                self.download_button.setEnabled(False)
+                ok = self.model_manager.download_models()
+                if ok:
+                    QMessageBox.information(self, "成功", "模型下载完成！")
+                else:
+                    QMessageBox.warning(self, "部分失败", "部分模型下载失败，请稍后重试或改用本地复制。")
+                self.update_status()
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"下载模型失败:\n{str(e)}")
+            finally:
+                self.download_button.setEnabled(True)
 
     def check_and_setup_models():
         """检查并设置模型，返回是否设置成功"""
