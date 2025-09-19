@@ -221,8 +221,8 @@ class ModelManager:
 
 
 if HAS_QT:
-class ModelSetupDialog(QDialog):
-    """模型设置对话框 - 支持本地复制与直接下载"""
+    class ModelSetupDialog(QDialog):
+        """模型设置对话框 - 支持本地复制与直接下载"""
         
         def __init__(self, parent=None):
             super().__init__(parent)
@@ -257,18 +257,18 @@ class ModelSetupDialog(QDialog):
             self.status_text.setReadOnly(True)
             layout.addWidget(self.status_text)
             
-        # 按钮区域
-        button_layout = QHBoxLayout()
-        
-        self.copy_button = QPushButton("从本地复制模型")
-        self.copy_button.clicked.connect(self.copy_models)
-        button_layout.addWidget(self.copy_button)
+            # 按钮区域
+            button_layout = QHBoxLayout()
+            
+            self.copy_button = QPushButton("从本地复制模型")
+            self.copy_button.clicked.connect(self.copy_models)
+            button_layout.addWidget(self.copy_button)
 
-        self.download_button = QPushButton("下载轻量模型")
-        self.download_button.clicked.connect(self.download_models)
-        button_layout.addWidget(self.download_button)
+            self.download_button = QPushButton("下载轻量模型")
+            self.download_button.clicked.connect(self.download_models)
+            button_layout.addWidget(self.download_button)
 
-        layout.addLayout(button_layout)
+            layout.addLayout(button_layout)
             
             # 关闭按钮
             self.close_button = QPushButton("稍后配置")
