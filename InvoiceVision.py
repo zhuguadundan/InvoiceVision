@@ -1019,9 +1019,9 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 
                 if paddle_errors:
                     self.log_debug("PaddleOCR模块解决方案:", "ERROR")
-                    self.log_debug("请将缺失的PaddleOCR相关模块添加到 InvoiceVision.spec 的 hiddenimports 中:", "ERROR")
+                    self.log_debug("请安装/修复缺失的 PaddleOCR 相关依赖，或使用内置打包流程（Embedded Python）而非 PyInstaller。", "ERROR")
                     hiddenimports_list = [module for name, module in paddle_errors]
-                    self.log_debug(f"  {', '.join(hiddenimports_list)}", "ERROR")
+                    self.log_debug(f"  相关模块: {', '.join(hiddenimports_list)}", "ERROR")
             
             # 检查模型文件
             self.log_debug("检查模型文件:", "INFO")

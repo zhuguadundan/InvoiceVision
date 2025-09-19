@@ -22,8 +22,6 @@ InvoiceVision/
 │   ├── PP-OCRv5_server_det/
 │   ├── PP-OCRv5_server_rec/
 │   └── ...
-├── static/                   # 静态资源
-├── templates/               # 模板文件
 └── README_DEPLOYMENT.md     # 本文件
 ```
 
