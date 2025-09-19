@@ -1,4 +1,4 @@
-import sys, fitz
+import fitz
 from os import path, makedirs
 import datetime
 import os

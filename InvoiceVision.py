@@ -6,16 +6,15 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 import sys
-from PyQt5.QtWidgets import (QFileDialog, QApplication, QPushButton, 
-                            QMessageBox, QMainWindow, QInputDialog, QTextEdit,
+from PyQt5.QtWidgets import (QFileDialog, QApplication, QPushButton,
+                            QMessageBox, QMainWindow, QTextEdit,
                             QSplitter, QWidget, QVBoxLayout, QHBoxLayout,
-                            QTreeWidget, QTreeWidgetItem, QTabWidget,
-                            QScrollArea, QFrame, QGroupBox, QGridLayout,
-                            QProgressBar, QCheckBox, QSpacerItem, QSizePolicy,
+                            QTabWidget,
+                            QFrame, QGroupBox, QGridLayout,
+                            QProgressBar,
                             QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView)
-from PyQt5.Qt import QThread, QMutex, pyqtSignal
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.Qt import QThread, pyqtSignal
+from PyQt5.QtCore import Qt
 from MainAction import ocr_pdf_offline, ocr_images_offline
 try:
     # 注意：使用ModelManager.py（大写M），不是model_manager.py
@@ -614,7 +613,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 border-top-right-radius: 6px;
                 border-bottom-right-radius: 6px;
             }
-            QTreeWidget, QTableWidget {
+            QTableWidget {
                 border: 1px solid #dee2e6;
                 border-radius: 6px;
                 background-color: white;
@@ -622,11 +621,11 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 selection-background-color: #007bff;
                 font-size: 13px;
             }
-            QTreeWidget::item, QTableWidget::item {
+            QTableWidget::item {
                 padding: 8px;
                 border-bottom: 1px solid #e9ecef;
             }
-            QTreeWidget::item:selected, QTableWidget::item:selected {
+            QTableWidget::item:selected {
                 background-color: #007bff;
                 color: white;
             }
@@ -720,7 +719,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 model_info += "\n状态: [SUCCESS] 可完全离线运行"
                 
             else:
-                model_info = "未找到本地模型文件\n\n请运行 setup_offline_simple.py 设置离线模型"
+                model_info = "未找到本地模型文件\n\n请通过【工具】→【模型配置】复制或下载模型"
         else:
             model_info = "models 目录不存在\n\n请先下载模型文件"
         

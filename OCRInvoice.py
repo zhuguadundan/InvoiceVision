@@ -8,8 +8,6 @@
 # 延迟导入 - 避免启动时就加载PaddleOCR
 # from paddleocr import PaddleOCR  # 移到使用时导入
 import re
-import sys
-from PIL import Image
 import os
 import json
 import numpy as np
@@ -18,12 +16,7 @@ from pathlib import Path
 import threading
 import time
 
-def safe_print(text):
-    """安全的打印函数，处理编码问题"""
-    try:
-        print(text)
-    except UnicodeEncodeError:
-        print(text.encode('gbk', 'ignore').decode('gbk'))
+"
 
 class OfflineOCRInvoice:
     # 类变量：所有实例共享的OCR引擎

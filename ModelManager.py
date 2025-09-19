@@ -13,10 +13,10 @@ from pathlib import Path
 # 尝试懒加载 PyQt5（在无GUI环境下保持可导入）
 try:
     from PyQt5.QtWidgets import (
-        QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar,
+        QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
         QTextEdit, QMessageBox, QFileDialog
     )
-    from PyQt5.QtCore import QThread, pyqtSignal, Qt
+    from PyQt5.QtCore import Qt
     from PyQt5.QtGui import QFont
     HAS_QT = True
 except Exception:
