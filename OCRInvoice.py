@@ -78,9 +78,9 @@ class OfflineOCRInvoice:
         # 构建模型路径 - 使用正确的models_path
         if "models" not in config:
             config["models"] = {
-                "cls_model_dir": str(models_path / "PP-LCNet_x1_0_textline_ori"),
-                "det_model_dir": str(models_path / "PP-OCRv5_server_det"),
-                "rec_model_dir": str(models_path / "PP-OCRv5_server_rec")
+                "det_model_dir": str(models_path / "PP-OCRv5_mobile_det"),
+                "rec_model_dir": str(models_path / "PP-OCRv5_mobile_rec"),
+                "cls_model_dir": str(models_path / "ch_ppocr_mobile_v2.0_cls")
             }
         else:
             # 确保模型路径为绝对路径，使用正确的models_path

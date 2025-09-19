@@ -719,7 +719,7 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
                 model_info += "\n状态: [SUCCESS] 可完全离线运行"
                 
             else:
-                model_info = "未找到本地模型文件\n\n请通过【工具】→【模型配置】复制或下载模型"
+                model_info = "未找到本地模型文件\n\n请通过【工具】→【模型配置】复制模型"
         else:
             model_info = "models 目录不存在\n\n请先下载模型文件"
         
@@ -1025,9 +1025,9 @@ class OfflineInvoiceOCRMainWindow(QMainWindow):
             # 检查模型文件
             self.log_debug("检查模型文件:", "INFO")
             model_paths = [
-                "models/PP-OCRv5_server_det",
-                "models/PP-OCRv5_server_rec", 
-                "models/PP-LCNet_x1_0_textline_ori"
+                "models/PP-OCRv5_mobile_det",
+                "models/PP-OCRv5_mobile_rec", 
+                "models/ch_ppocr_mobile_v2.0_cls"
             ]
             
             for model_path in model_paths:
@@ -1372,9 +1372,9 @@ def main():
                 "模型配置错误", 
                 "AI模型文件缺失或配置失败，程序无法正常运行。\n\n"
                 "请确保以下文件存在:\n"
-                "- models/PP-OCRv5_server_det/\n"
-                "- models/PP-OCRv5_server_rec/\n"
-                "- models/PP-LCNet_x1_0_textline_ori/\n\n"
+                "- models/PP-OCRv5_mobile_det/\n"
+                "- models/PP-OCRv5_mobile_rec/\n"
+                "- models/ch_ppocr_mobile_v2.0_cls/\n\n"
                 "您可以:\n"
                 "1. 将现有模型文件夹复制到程序目录下\n"
                 "2. 重新运行程序并在模型配置界面中设置正确路径"

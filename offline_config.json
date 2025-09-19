@@ -3,11 +3,11 @@
   "models_path": "models",
   "use_gpu": false,
   "lang": "ch",
-  "version": "2.0-offline-only",
-  "description": "纯离线版本配置 - 仅支持本地OCR识别",
+  "version": "2.1-mobile-default",
+  "description": "纯离线版本配置 - 默认使用PP-OCRv5 mobile轻量模型",
   "models": {
-    "cls_model_dir": "models/PP-LCNet_x1_0_textline_ori",
-    "det_model_dir": "models/PP-OCRv5_server_det",
-    "rec_model_dir": "models/PP-OCRv5_server_rec"
+    "det_model_dir": "models/PP-OCRv5_mobile_det",
+    "rec_model_dir": "models/PP-OCRv5_mobile_rec",
+    "cls_model_dir": "models/ch_ppocr_mobile_v2.0_cls"
   }
 }

@@ -18,9 +18,10 @@ InvoiceVision/
 │   ├── python311.dll
 │   ├── Lib/site-packages/   # 包含PaddleOCR等依赖
 │   └── ...
-├── models/                   # 外部模型目录
-│   ├── PP-OCRv5_server_det/
-│   ├── PP-OCRv5_server_rec/
+├── models/                   # 外部模型目录（默认轻量模型）
+│   ├── PP-OCRv5_mobile_det/
+│   ├── PP-OCRv5_mobile_rec/
+│   ├── ch_ppocr_mobile_v2.0_cls/
 │   └── ...
 └── README_DEPLOYMENT.md     # 本文件
 ```

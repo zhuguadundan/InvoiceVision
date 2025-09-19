@@ -64,14 +64,14 @@ def init_models_config():
         "offline_mode": True,
         "models_path": models_path,
         "models": {
-            "cls_model_dir": os.path.join(models_path, "PP-LCNet_x1_0_textline_ori"),
-            "det_model_dir": os.path.join(models_path, "PP-OCRv5_server_det"),
-            "rec_model_dir": os.path.join(models_path, "PP-OCRv5_server_rec")
+            "det_model_dir": os.path.join(models_path, "PP-OCRv5_mobile_det"),
+            "rec_model_dir": os.path.join(models_path, "PP-OCRv5_mobile_rec"),
+            "cls_model_dir": os.path.join(models_path, "ch_ppocr_mobile_v2.0_cls")
         },
         "use_gpu": False,
         "lang": "ch",
-        "version": "2.0-external-models",
-        "description": "外部模型架构配置 - 模型文件不再打包到exe中"
+        "version": "2.1-mobile-default",
+        "description": "外部模型架构配置 - 默认使用PP-OCRv5 mobile"
     }
     
     return config

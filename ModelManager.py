@@ -28,9 +28,9 @@ class ModelManager:
     def __init__(self):
         self.models_dir = Path("models")
         self.required_models = [
-            "PP-OCRv5_server_det",
-            "PP-OCRv5_server_rec", 
-            "PP-LCNet_x1_0_textline_ori"
+            "PP-OCRv5_mobile_det",
+            "PP-OCRv5_mobile_rec",
+            "ch_ppocr_mobile_v2.0_cls"
         ]
         
     def get_models_directory(self):
