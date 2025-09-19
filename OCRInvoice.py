@@ -16,8 +16,6 @@ from pathlib import Path
 import threading
 import time
 
-"
-
 class OfflineOCRInvoice:
     # 类变量：所有实例共享的OCR引擎
     _shared_ocr_engine = None
