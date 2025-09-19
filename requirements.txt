@@ -20,12 +20,7 @@ pymupdf>=1.20.0
 # GUI界面
 pyqt5>=5.15.0
 
-# Web 服务
-flask>=2.3.0
-flask-socketio>=5.3.6
-# 生产 WSGI 与异步（容器用）
-gunicorn>=21.2.0
-eventlet>=0.33.0
+# Web 服务（仅 web 分支需要，GUI 主分支不包含）
 
 # 其他工具
 pyyaml>=6.0
