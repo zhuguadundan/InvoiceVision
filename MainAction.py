@@ -234,33 +234,4 @@ def OCR_IMGS(img_path, flag):
     """向后兼容的图片处理函数"""  
     return ocr_images_offline(img_path, flag)
 
-if __name__ == '__main__':
-    print("=" * 60)
-    print("离线发票OCR识别器 - 批处理测试")
-    print("=" * 60)
-    
-    test_mode = '快速'
-    current_dir = os.getcwd()
-    
-    # 查找PDF文件进行测试
-    pdf_files = [f for f in os.listdir(current_dir) if f.lower().endswith('.pdf')]
-    if pdf_files:
-        print(f"找到PDF文件: {pdf_files[0]}")
-        ocr_pdf_offline(pdf_files[0], test_mode)
-    else:
-        print("未找到PDF文件，查找图片文件夹...")
-        
-        # 查找包含图片的文件夹
-        for item in os.listdir(current_dir):
-            item_path = os.path.join(current_dir, item)
-            if os.path.isdir(item_path) and item != "models":  # 排除模型目录
-                # 检查文件夹是否包含图片
-                image_files = [f for f in os.listdir(item_path) 
-                             if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
-                if image_files:
-                    print(f"找到图片文件夹: {item} (包含{len(image_files)}个图片)")
-                    ocr_images_offline(item_path, test_mode)
-                    break
-        else:
-            print("未找到包含图片的文件夹")
-            print("请将发票图片放入一个文件夹中，或将PDF文件放在当前目录")
+## 注意：正式应用通过 GUI 启动；原本的直跑测试代码已移除以降低噪音。

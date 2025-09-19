@@ -95,9 +95,5 @@ class pdf2img:
         return self.imagePath
 
 
-if __name__ == "__main__":
-    pdfPath = 'INV/InvoiceColored.PDF'
-    Topdf = pdf2img()
-    Topdf.pyMuPDF_fitz(pdfPath)
-    print(Topdf.imagePath)
+## 注意：本模块由主程序调用；原本的直跑测试代码已移除。
 

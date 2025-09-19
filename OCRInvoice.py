@@ -232,7 +232,7 @@ class OfflineOCRInvoice:
         # 检查全局OCR引擎是否可用
         if self.ocr_engine is None:
             print("ERROR: 全局OCR引擎未初始化，请先调用 OfflineOCRInvoice.global_initialize_ocr()")
-            return [image_path, '', '', '', '']
+            return [image_path, '', '', '', '', '']
         
         try:
             print(f"开始处理图片: {os.path.basename(image_path)}")
@@ -258,7 +258,7 @@ class OfflineOCRInvoice:
             
             if not texts:
                 print("OCR未识别到任何文本")
-                return [image_path, '', '', '', '']
+                return [image_path, '', '', '', '', '']
             
             # 检查是否识别到发票内容
             combined_text = '【' + '】【'.join(texts) + '】'
@@ -279,7 +279,7 @@ class OfflineOCRInvoice:
             
         except Exception as e:
             print(f"OCR处理出错: {e}")
-            return [image_path, '', '', '', '']
+            return [image_path, '', '', '', '', '']
     
     def _extract_texts_from_result(self, result):
         """从OCR结果中提取文本"""
@@ -573,26 +573,4 @@ class OfflineOCRInvoice:
 # 保持向后兼容性
 OCRInvoice = OfflineOCRInvoice
 
-if __name__ == '__main__':
-    # 测试代码
-    print("=" * 60)
-    print("离线OCR发票识别器测试 (外部模型架构)")
-    print("=" * 60)
-    
-    ocr_invoice = OfflineOCRInvoice()
-    
-    # 显示模型信息
-    model_info = ocr_invoice.get_model_info()
-    print("模型信息:")
-    for key, value in model_info.items():
-        print(f"  {key}: {value}")
-    
-    # 检查模型可用性
-    models_available, message = ocr_invoice.check_models_available()
-    print(f"\n模型状态: {message}")
-    
-    if models_available:
-        print("\n[OK] 模型文件检查通过，可以进行OCR识别")
-        # 这里可以添加实际的图片测试
-    else:
-        print("\n[ERROR] 模型文件缺失，请使用模型管理器配置模型文件")
+## 注意：正式应用通过 GUI 启动；原本的直跑测试代码已移除以降低噪音。

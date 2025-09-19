@@ -1,0 +1,4 @@
+# 忽略 models 下的所有内容，仅保留说明文件
+*
+!.gitignore
+!README.md
